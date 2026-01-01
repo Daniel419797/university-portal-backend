@@ -22,6 +22,9 @@ RUN npm install --omit=dev && npm cache clean --force
 # Copy built assets from builder
 COPY --from=build /app/dist ./dist
 
+# Ensure writable logs directory for non-root user
+RUN mkdir -p /app/logs && chown node:node /app/logs
+
 USER node
 EXPOSE 5000
 CMD ["node", "dist/server.js"]
