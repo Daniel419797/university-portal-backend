@@ -14,6 +14,13 @@ const connectRedis = (): Redis | null => {
 
     redisClient = new Redis(redisUrl, {
       maxRetriesPerRequest: 3,
+      retryStrategy: (times) => {
+        if (times > 3) {
+          logger.warn('Redis connection failed after 3 retries. Running without Redis.');
+          return null; // Stop retrying
+        }
+        return Math.min(times * 100, 2000);
+      },
       enableReadyCheck: true,
       lazyConnect: true,
     });

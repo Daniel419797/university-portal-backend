@@ -13,7 +13,7 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
       duration: `${duration}ms`,
       ip: req.ip,
       userAgent: req.get('user-agent'),
-      user: req.user?.userId || 'anonymous',
+      user: (req as any).user?.userId || 'anonymous',
     };
 
     if (res.statusCode >= 400) {

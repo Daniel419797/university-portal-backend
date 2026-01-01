@@ -9,8 +9,15 @@ import {
   unenrollCourse,
   getEnrolledStudents,
 } from '../../controllers/course.controller';
+import {
+  uploadCourseMaterial,
+  getCourseMaterials,
+  downloadCourseMaterial,
+  deleteCourseMaterial
+} from '../../controllers/material.controller';
 import { authenticate } from '../../middleware/auth.middleware';
 import { authorizeRoles } from '../../middleware/role.middleware';
+import { uploadAny } from '../../middleware/upload.middleware';
 
 const router = Router();
 
@@ -146,5 +153,30 @@ router.delete('/:id/unenroll', authenticate, authorizeRoles('student'), unenroll
  *         description: Students retrieved successfully
  */
 router.get('/:id/students', authenticate, authorizeRoles('lecturer', 'admin'), getEnrolledStudents);
+
+// Course Materials Routes
+router.post(
+  '/:id/materials',
+  authenticate,
+  authorizeRoles('lecturer'),
+  uploadAny,
+  uploadCourseMaterial
+);
+
+router.get('/:id/materials', authenticate, getCourseMaterials);
+
+router.post(
+  '/:id/materials/:materialId/download',
+  authenticate,
+  authorizeRoles('student'),
+  downloadCourseMaterial
+);
+
+router.delete(
+  '/:id/materials/:materialId',
+  authenticate,
+  authorizeRoles('lecturer'),
+  deleteCourseMaterial
+);
 
 export default router;

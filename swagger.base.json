@@ -1,0 +1,600 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "University Portal API",
+    "version": "1.0.0",
+    "description": "Contract-first shapes for key DTOs and select endpoints. Auto-generated paths will be merged with these definitions."
+  },
+  "servers": [
+    {
+      "url": "https://api.university.edu",
+      "description": "Production server"
+    },
+    {
+      "url": "http://localhost:5000",
+      "description": "Development server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "ApiResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "message": { "type": "string" },
+          "data": { "nullable": true }
+        },
+        "required": ["success"]
+      },
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "details": { "type": "object", "nullable": true }
+            },
+            "required": ["code", "message"]
+          }
+        },
+        "required": ["success", "error"]
+      },
+      "PaginatedResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "type": "array", "items": { "type": "object" } },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "page": { "type": "integer" },
+              "limit": { "type": "integer" },
+              "total": { "type": "integer" },
+              "totalPages": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "email": { "type": "string", "format": "email" },
+          "firstName": { "type": "string" },
+          "lastName": { "type": "string" },
+          "role": { "type": "string", "enum": ["student", "lecturer", "admin", "hod", "bursary"] },
+          "department": { "type": "string" },
+          "level": { "type": "string" },
+          "matricNumber": { "type": "string" },
+          "avatar": { "type": "string" }
+        },
+        "required": ["id", "email", "firstName", "lastName", "role"]
+      },
+      "Course": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "code": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "credits": { "type": "integer" },
+          "level": { "type": "string" },
+          "semester": { "type": "string" },
+          "department": { "type": "string" },
+          "lecturerId": { "type": "string" }
+        }
+      },
+      "CourseMaterial": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "type": { "type": "string" },
+          "url": { "type": "string" },
+          "uploadedAt": { "type": "string", "format": "date-time" },
+          "size": { "type": "string" }
+        }
+      },
+      "Assignment": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "courseId": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "dueDate": { "type": "string", "format": "date-time" },
+          "totalMarks": { "type": "number" },
+          "attachments": { "type": "array", "items": { "$ref": "#/components/schemas/FileMeta" } }
+        }
+      },
+      "AssignmentSubmissionRequest": {
+        "type": "object",
+        "properties": {
+          "files": { "type": "array", "items": { "type": "string", "description": "File URLs or uploaded asset IDs" } },
+          "comment": { "type": "string" }
+        },
+        "required": ["files"]
+      },
+      "AssignmentSubmission": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "studentId": { "type": "string" },
+          "assignmentId": { "type": "string" },
+          "files": { "type": "array", "items": { "$ref": "#/components/schemas/FileMeta" } },
+          "comment": { "type": "string" },
+          "status": { "type": "string", "enum": ["submitted", "graded", "pending"] },
+          "grade": { "type": "number", "nullable": true }
+        }
+      },
+      "Quiz": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "courseId": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "duration": { "type": "integer" },
+          "totalMarks": { "type": "number" }
+        }
+      },
+      "QuizAnswer": {
+        "type": "object",
+        "properties": {
+          "questionId": { "type": "string" },
+          "answer": { "type": "string" }
+        },
+        "required": ["questionId", "answer"]
+      },
+      "QuizSubmitRequest": {
+        "type": "object",
+        "properties": {
+          "attemptId": { "type": "string" },
+          "answers": { "type": "array", "items": { "$ref": "#/components/schemas/QuizAnswer" } }
+        },
+        "required": ["attemptId", "answers"]
+      },
+      "Result": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "courseCode": { "type": "string" },
+          "courseTitle": { "type": "string" },
+          "score": { "type": "number" },
+          "grade": { "type": "string" },
+          "gradePoint": { "type": "number" },
+          "creditUnit": { "type": "number" }
+        }
+      },
+      "Payment": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "amount": { "type": "number" },
+          "paymentType": { "type": "string" },
+          "paymentMethod": { "type": "string" },
+          "reference": { "type": "string" },
+          "status": { "type": "string", "enum": ["pending", "verified", "rejected", "processing"] }
+        }
+      },
+      "PaymentCreateRequest": {
+        "type": "object",
+        "properties": {
+          "amount": { "type": "number" },
+          "paymentType": { "type": "string" },
+          "paymentMethod": { "type": "string" },
+          "reference": { "type": "string" }
+        },
+        "required": ["amount", "paymentType", "paymentMethod", "reference"]
+      },
+      "InstallmentPlan": {
+        "type": "object",
+        "properties": {
+          "totalAmount": { "type": "number" },
+          "numberOfInstallments": { "type": "integer" },
+          "firstPaymentDate": { "type": "string", "format": "date" }
+        }
+      },
+      "Hostel": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "gender": { "type": "string" },
+          "capacity": { "type": "integer" },
+          "location": { "type": "string" }
+        }
+      },
+      "HostelApplication": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "hostelId": { "type": "string" },
+          "roomPreference": { "type": "string" },
+          "specialRequirements": { "type": "string" },
+          "status": { "type": "string", "enum": ["pending", "approved", "rejected", "allocated"] }
+        }
+      },
+      "Notification": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string" },
+          "title": { "type": "string" },
+          "body": { "type": "string" },
+          "read": { "type": "boolean" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Message": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "subject": { "type": "string" },
+          "body": { "type": "string" },
+          "senderId": { "type": "string" },
+          "recipientId": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Settings": {
+        "type": "object",
+        "properties": {
+          "theme": { "type": "string", "enum": ["light", "dark"] },
+          "emailNotifications": { "type": "boolean" },
+          "pushNotifications": { "type": "boolean" },
+          "language": { "type": "string" }
+        }
+      },
+      "FileMeta": {
+        "type": "object",
+        "properties": {
+          "fileId": { "type": "string" },
+          "url": { "type": "string" },
+          "size": { "type": "integer" }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "password": { "type": "string" }
+        },
+        "required": ["email", "password"]
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "password": { "type": "string" },
+          "firstName": { "type": "string" },
+          "lastName": { "type": "string" },
+          "role": { "type": "string", "enum": ["student", "lecturer", "admin", "hod", "bursary"] },
+          "department": { "type": "string" },
+          "level": { "type": "string" },
+          "matricNumber": { "type": "string" }
+        },
+        "required": ["email", "password", "firstName", "lastName", "role"]
+      },
+      "AuthResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ApiResponse" },
+          {
+            "type": "object",
+            "properties": {
+              "token": { "type": "string" },
+              "user": { "$ref": "#/components/schemas/User" }
+            }
+          }
+        ]
+      },
+      "UpdateProfileRequest": {
+        "type": "object",
+        "properties": {
+          "firstName": { "type": "string" },
+          "lastName": { "type": "string" },
+          "phone": { "type": "string" },
+          "avatar": { "type": "string", "description": "Base64 or URL" }
+        }
+      },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "properties": {
+          "currentPassword": { "type": "string" },
+          "newPassword": { "type": "string" }
+        },
+        "required": ["currentPassword", "newPassword"]
+      },
+      "SubmitQuizResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "score": { "type": "number" },
+          "totalMarks": { "type": "number" },
+          "attemptId": { "type": "string" }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuthResponse" }
+              }
+            }
+          },
+          "400": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Admin-only registration",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RegisterRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuthResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/profile": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Get my profile",
+        "responses": {
+          "200": {
+            "description": "Profile",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/User" }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["Users"],
+        "summary": "Update my profile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateProfileRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated profile",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/User" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/password": {
+      "put": {
+        "tags": ["Users"],
+        "summary": "Change my password",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ChangePasswordRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Password changed" }
+        }
+      }
+    },
+    "/students/assignments/{id}/submit": {
+      "post": {
+        "tags": ["Students"],
+        "summary": "Submit an assignment",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AssignmentSubmissionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Submitted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AssignmentSubmission" } } } },
+          "400": { "description": "Validation error" }
+        }
+      }
+    },
+    "/students/quizzes/{id}/submit": {
+      "post": {
+        "tags": ["Students"],
+        "summary": "Submit quiz answers",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/QuizSubmitRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Submitted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SubmitQuizResponse" } } } }
+        }
+      }
+    },
+    "/students/payments": {
+      "post": {
+        "tags": ["Payments"],
+        "summary": "Create a payment",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PaymentCreateRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Payment initialized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Payment" } } } }
+        }
+      },
+      "get": {
+        "tags": ["Payments"],
+        "summary": "List my payments",
+        "responses": {
+          "200": {
+            "description": "Payment list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Payment" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/students/payments/{id}/receipt": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Get payment receipt",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Receipt", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Payment" } } } }
+        }
+      }
+    },
+    "/students/results": {
+      "get": {
+        "tags": ["Results"],
+        "summary": "Get my results",
+        "responses": {
+          "200": {
+            "description": "Results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": { "type": "array", "items": { "$ref": "#/components/schemas/Result" } },
+                    "gpa": { "type": "number" },
+                    "cgpa": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notifications/unread-count": {
+      "get": {
+        "tags": ["Notifications"],
+        "summary": "Get unread notifications count",
+        "responses": {
+          "200": {
+            "description": "Count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "unread": { "type": "integer" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/files/upload": {
+      "post": {
+        "tags": ["Files"],
+        "summary": "Upload a file",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": { "type": "string", "format": "binary" },
+                  "type": { "type": "string", "enum": ["assignment", "material", "profile", "document"] }
+                },
+                "required": ["file", "type"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Uploaded",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FileMeta" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

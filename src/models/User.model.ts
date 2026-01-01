@@ -12,6 +12,18 @@ export interface IUser extends Document {
   studentId?: string;
   department?: mongoose.Types.ObjectId;
   level?: string;
+  phoneNumber?: string;
+  address?: string;
+  dateOfBirth?: Date;
+  nationality?: string;
+  stateOfOrigin?: string;
+  bloodGroup?: string;
+  emergencyContact?: {
+    name: string;
+    relationship: string;
+    phone: string;
+  };
+  isActive: boolean;
   isEmailVerified: boolean;
   twoFactorMethod?: 'totp' | 'email';
   twoFactorSecret?: string;
@@ -75,6 +87,21 @@ const userSchema = new Schema<IUser>(
       ref: 'Department',
     },
     level: String,
+    phoneNumber: String,
+    address: String,
+    dateOfBirth: Date,
+    nationality: String,
+    stateOfOrigin: String,
+    bloodGroup: String,
+    emergencyContact: {
+      name: String,
+      relationship: String,
+      phone: String,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
     isEmailVerified: {
       type: Boolean,
       default: false,

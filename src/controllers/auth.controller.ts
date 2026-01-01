@@ -239,7 +239,7 @@ export const resetPassword = asyncHandler(async (req: Request, res: Response) =>
 
 // Get current user
 export const getCurrentUser = asyncHandler(async (req: Request, res: Response) => {
-  const user = await User.findById(req.user?.userId).populate('department', 'name code');
+  const user = await User.findById((req as any).user?.userId).populate('department', 'name code');
 
   if (!user) {
     throw ApiError.notFound('User not found');

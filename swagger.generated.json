@@ -1,0 +1,5990 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "University Portal API",
+    "version": "1.0.0",
+    "description": "Contract-first shapes for key DTOs and select endpoints. Auto-generated paths will be merged with these definitions."
+  },
+  "servers": [
+    {
+      "url": "https://api.university.edu",
+      "description": "Production server"
+    },
+    {
+      "url": "http://localhost:5000",
+      "description": "Development server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "ApiResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "nullable": true
+          }
+        },
+        "required": [
+          "success"
+        ]
+      },
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object",
+                "nullable": true
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          }
+        },
+        "required": [
+          "success",
+          "error"
+        ]
+      },
+      "PaginatedResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "page": {
+                "type": "integer"
+              },
+              "limit": {
+                "type": "integer"
+              },
+              "total": {
+                "type": "integer"
+              },
+              "totalPages": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "student",
+              "lecturer",
+              "admin",
+              "hod",
+              "bursary"
+            ]
+          },
+          "department": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
+          "matricNumber": {
+            "type": "string"
+          },
+          "avatar": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "firstName",
+          "lastName",
+          "role"
+        ]
+      },
+      "Course": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "credits": {
+            "type": "integer"
+          },
+          "level": {
+            "type": "string"
+          },
+          "semester": {
+            "type": "string"
+          },
+          "department": {
+            "type": "string"
+          },
+          "lecturerId": {
+            "type": "string"
+          }
+        }
+      },
+      "CourseMaterial": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "uploadedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "size": {
+            "type": "string"
+          }
+        }
+      },
+      "Assignment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "courseId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "totalMarks": {
+            "type": "number"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileMeta"
+            }
+          }
+        }
+      },
+      "AssignmentSubmissionRequest": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "File URLs or uploaded asset IDs"
+            }
+          },
+          "comment": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "files"
+        ]
+      },
+      "AssignmentSubmission": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "studentId": {
+            "type": "string"
+          },
+          "assignmentId": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileMeta"
+            }
+          },
+          "comment": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "submitted",
+              "graded",
+              "pending"
+            ]
+          },
+          "grade": {
+            "type": "number",
+            "nullable": true
+          }
+        }
+      },
+      "Quiz": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "courseId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "integer"
+          },
+          "totalMarks": {
+            "type": "number"
+          }
+        }
+      },
+      "QuizAnswer": {
+        "type": "object",
+        "properties": {
+          "questionId": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "questionId",
+          "answer"
+        ]
+      },
+      "QuizSubmitRequest": {
+        "type": "object",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuizAnswer"
+            }
+          }
+        },
+        "required": [
+          "attemptId",
+          "answers"
+        ]
+      },
+      "Result": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "courseCode": {
+            "type": "string"
+          },
+          "courseTitle": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "grade": {
+            "type": "string"
+          },
+          "gradePoint": {
+            "type": "number"
+          },
+          "creditUnit": {
+            "type": "number"
+          }
+        }
+      },
+      "Payment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "paymentType": {
+            "type": "string"
+          },
+          "paymentMethod": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "verified",
+              "rejected",
+              "processing"
+            ]
+          }
+        }
+      },
+      "PaymentCreateRequest": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "paymentType": {
+            "type": "string"
+          },
+          "paymentMethod": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount",
+          "paymentType",
+          "paymentMethod",
+          "reference"
+        ]
+      },
+      "InstallmentPlan": {
+        "type": "object",
+        "properties": {
+          "totalAmount": {
+            "type": "number"
+          },
+          "numberOfInstallments": {
+            "type": "integer"
+          },
+          "firstPaymentDate": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
+      "Hostel": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "gender": {
+            "type": "string"
+          },
+          "capacity": {
+            "type": "integer"
+          },
+          "location": {
+            "type": "string"
+          }
+        }
+      },
+      "HostelApplication": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "hostelId": {
+            "type": "string"
+          },
+          "roomPreference": {
+            "type": "string"
+          },
+          "specialRequirements": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "allocated"
+            ]
+          }
+        }
+      },
+      "Notification": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "read": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Message": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "senderId": {
+            "type": "string"
+          },
+          "recipientId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Settings": {
+        "type": "object",
+        "properties": {
+          "theme": {
+            "type": "string",
+            "enum": [
+              "light",
+              "dark"
+            ]
+          },
+          "emailNotifications": {
+            "type": "boolean"
+          },
+          "pushNotifications": {
+            "type": "boolean"
+          },
+          "language": {
+            "type": "string"
+          }
+        }
+      },
+      "FileMeta": {
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "student",
+              "lecturer",
+              "admin",
+              "hod",
+              "bursary"
+            ]
+          },
+          "department": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
+          "matricNumber": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "firstName",
+          "lastName",
+          "role"
+        ]
+      },
+      "AuthResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "token": {
+                "type": "string"
+              },
+              "user": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        ]
+      },
+      "UpdateProfileRequest": {
+        "type": "object",
+        "properties": {
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "avatar": {
+            "type": "string",
+            "description": "Base64 or URL"
+          }
+        }
+      },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ]
+      },
+      "SubmitQuizResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "score": {
+            "type": "number"
+          },
+          "totalMarks": {
+            "type": "number"
+          },
+          "attemptId": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid credentials"
+          }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Admin-only registration",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/profile": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Get my profile",
+        "responses": {
+          "200": {
+            "description": "Profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Update my profile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/password": {
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Change my password",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password changed"
+          }
+        }
+      }
+    },
+    "/students/assignments/{id}/submit": {
+      "post": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Submit an assignment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignmentSubmissionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Submitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssignmentSubmission"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          }
+        }
+      }
+    },
+    "/students/quizzes/{id}/submit": {
+      "post": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Submit quiz answers",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuizSubmitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Submitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmitQuizResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/students/payments": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Create a payment",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Payment initialized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payment"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "List my payments",
+        "responses": {
+          "200": {
+            "description": "Payment list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Payment"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/students/payments/{id}/receipt": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Get payment receipt",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payment"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/students/results": {
+      "get": {
+        "tags": [
+          "Results"
+        ],
+        "summary": "Get my results",
+        "responses": {
+          "200": {
+            "description": "Results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Result"
+                      }
+                    },
+                    "gpa": {
+                      "type": "number"
+                    },
+                    "cgpa": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notifications/unread-count": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Get unread notifications count",
+        "responses": {
+          "200": {
+            "description": "Count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "unread": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/files/upload": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Upload a file",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "assignment",
+                      "material",
+                      "profile",
+                      "document"
+                    ]
+                  }
+                },
+                "required": [
+                  "file",
+                  "type"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Uploaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileMeta"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Auto-generated for POST /auth/logout",
+        "operationId": "post-auth-logout",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "auth.routes.ts"
+      }
+    },
+    "/auth/refresh-token": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Auto-generated for POST /auth/refresh-token",
+        "operationId": "post-auth-refresh-token",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "auth.routes.ts"
+      }
+    },
+    "/auth/verify-email": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Auto-generated for POST /auth/verify-email",
+        "operationId": "post-auth-verify-email",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "auth.routes.ts"
+      }
+    },
+    "/auth/forgot-password": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Auto-generated for POST /auth/forgot-password",
+        "operationId": "post-auth-forgot-password",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "auth.routes.ts"
+      }
+    },
+    "/auth/reset-password": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Auto-generated for POST /auth/reset-password",
+        "operationId": "post-auth-reset-password",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "auth.routes.ts"
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Auto-generated for GET /auth/me",
+        "operationId": "get-auth-me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "auth.routes.ts"
+      }
+    },
+    "/courses": {
+      "get": {
+        "tags": [
+          "Courses"
+        ],
+        "summary": "Auto-generated for GET /courses",
+        "operationId": "get-courses",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "course.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Courses"
+        ],
+        "summary": "Auto-generated for POST /courses",
+        "operationId": "post-courses",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "course.routes.ts"
+      }
+    },
+    "/courses/{id}": {
+      "get": {
+        "tags": [
+          "Courses"
+        ],
+        "summary": "Auto-generated for GET /courses/:id",
+        "operationId": "get-courses-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "course.routes.ts"
+      },
+      "put": {
+        "tags": [
+          "Courses"
+        ],
+        "summary": "Auto-generated for PUT /courses/:id",
+        "operationId": "put-courses-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "course.routes.ts"
+      },
+      "delete": {
+        "tags": [
+          "Courses"
+        ],
+        "summary": "Auto-generated for DELETE /courses/:id",
+        "operationId": "delete-courses-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "course.routes.ts"
+      }
+    },
+    "/courses/{id}/enroll": {
+      "post": {
+        "tags": [
+          "Courses"
+        ],
+        "summary": "Auto-generated for POST /courses/:id/enroll",
+        "operationId": "post-courses-id-enroll",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "course.routes.ts"
+      }
+    },
+    "/courses/{id}/unenroll": {
+      "delete": {
+        "tags": [
+          "Courses"
+        ],
+        "summary": "Auto-generated for DELETE /courses/:id/unenroll",
+        "operationId": "delete-courses-id-unenroll",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "course.routes.ts"
+      }
+    },
+    "/courses/{id}/students": {
+      "get": {
+        "tags": [
+          "Courses"
+        ],
+        "summary": "Auto-generated for GET /courses/:id/students",
+        "operationId": "get-courses-id-students",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "course.routes.ts"
+      }
+    },
+    "/courses/{id}/materials": {
+      "post": {
+        "tags": [
+          "Courses"
+        ],
+        "summary": "Auto-generated for POST /courses/:id/materials",
+        "operationId": "post-courses-id-materials",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "course.routes.ts"
+      },
+      "get": {
+        "tags": [
+          "Courses"
+        ],
+        "summary": "Auto-generated for GET /courses/:id/materials",
+        "operationId": "get-courses-id-materials",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "course.routes.ts"
+      }
+    },
+    "/courses/{id}/materials/{materialId}/download": {
+      "post": {
+        "tags": [
+          "Courses"
+        ],
+        "summary": "Auto-generated for POST /courses/:id/materials/:materialId/download",
+        "operationId": "post-courses-id-materials-materialId-download",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "materialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "course.routes.ts"
+      }
+    },
+    "/courses/{id}/materials/{materialId}": {
+      "delete": {
+        "tags": [
+          "Courses"
+        ],
+        "summary": "Auto-generated for DELETE /courses/:id/materials/:materialId",
+        "operationId": "delete-courses-id-materials-materialId",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "materialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "course.routes.ts"
+      }
+    },
+    "/assignments/{id}/submit": {
+      "post": {
+        "tags": [
+          "Assignments"
+        ],
+        "summary": "Auto-generated for POST /assignments/:id/submit",
+        "operationId": "post-assignments-id-submit",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "assignment.routes.ts"
+      }
+    },
+    "/assignments/{id}/submissions": {
+      "get": {
+        "tags": [
+          "Assignments"
+        ],
+        "summary": "Auto-generated for GET /assignments/:id/submissions",
+        "operationId": "get-assignments-id-submissions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "assignment.routes.ts"
+      }
+    },
+    "/assignments/{assignmentId}/submissions/{submissionId}/grade": {
+      "put": {
+        "tags": [
+          "Assignments"
+        ],
+        "summary": "Auto-generated for PUT /assignments/:assignmentId/submissions/:submissionId/grade",
+        "operationId": "put-assignments-assignmentId-submissions-submissionId-grade",
+        "parameters": [
+          {
+            "name": "assignmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "submissionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "assignment.routes.ts"
+      }
+    },
+    "/assignments": {
+      "get": {
+        "tags": [
+          "Assignments"
+        ],
+        "summary": "Auto-generated for GET /assignments",
+        "operationId": "get-assignments",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "assignment.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Assignments"
+        ],
+        "summary": "Auto-generated for POST /assignments",
+        "operationId": "post-assignments",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "assignment.routes.ts"
+      }
+    },
+    "/assignments/{id}": {
+      "get": {
+        "tags": [
+          "Assignments"
+        ],
+        "summary": "Auto-generated for GET /assignments/:id",
+        "operationId": "get-assignments-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "assignment.routes.ts"
+      },
+      "put": {
+        "tags": [
+          "Assignments"
+        ],
+        "summary": "Auto-generated for PUT /assignments/:id",
+        "operationId": "put-assignments-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "assignment.routes.ts"
+      },
+      "delete": {
+        "tags": [
+          "Assignments"
+        ],
+        "summary": "Auto-generated for DELETE /assignments/:id",
+        "operationId": "delete-assignments-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "assignment.routes.ts"
+      }
+    },
+    "/quizzes/{id}/start": {
+      "post": {
+        "tags": [
+          "Quizzes"
+        ],
+        "summary": "Auto-generated for POST /quizzes/:id/start",
+        "operationId": "post-quizzes-id-start",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "quiz.routes.ts"
+      }
+    },
+    "/quizzes/{id}/submit": {
+      "post": {
+        "tags": [
+          "Quizzes"
+        ],
+        "summary": "Auto-generated for POST /quizzes/:id/submit",
+        "operationId": "post-quizzes-id-submit",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "quiz.routes.ts"
+      }
+    },
+    "/quizzes/{id}/my-attempt": {
+      "get": {
+        "tags": [
+          "Quizzes"
+        ],
+        "summary": "Auto-generated for GET /quizzes/:id/my-attempt",
+        "operationId": "get-quizzes-id-my-attempt",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "quiz.routes.ts"
+      }
+    },
+    "/quizzes/{id}/attempts": {
+      "get": {
+        "tags": [
+          "Quizzes"
+        ],
+        "summary": "Auto-generated for GET /quizzes/:id/attempts",
+        "operationId": "get-quizzes-id-attempts",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "quiz.routes.ts"
+      }
+    },
+    "/quizzes": {
+      "get": {
+        "tags": [
+          "Quizzes"
+        ],
+        "summary": "Auto-generated for GET /quizzes",
+        "operationId": "get-quizzes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "quiz.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Quizzes"
+        ],
+        "summary": "Auto-generated for POST /quizzes",
+        "operationId": "post-quizzes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "quiz.routes.ts"
+      }
+    },
+    "/quizzes/{id}": {
+      "get": {
+        "tags": [
+          "Quizzes"
+        ],
+        "summary": "Auto-generated for GET /quizzes/:id",
+        "operationId": "get-quizzes-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "quiz.routes.ts"
+      },
+      "put": {
+        "tags": [
+          "Quizzes"
+        ],
+        "summary": "Auto-generated for PUT /quizzes/:id",
+        "operationId": "put-quizzes-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "quiz.routes.ts"
+      },
+      "delete": {
+        "tags": [
+          "Quizzes"
+        ],
+        "summary": "Auto-generated for DELETE /quizzes/:id",
+        "operationId": "delete-quizzes-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "quiz.routes.ts"
+      }
+    },
+    "/results/publish": {
+      "put": {
+        "tags": [
+          "Results"
+        ],
+        "summary": "Auto-generated for PUT /results/publish",
+        "operationId": "put-results-publish",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "result.routes.ts"
+      }
+    },
+    "/results/{id}/approve-hod": {
+      "put": {
+        "tags": [
+          "Results"
+        ],
+        "summary": "Auto-generated for PUT /results/:id/approve-hod",
+        "operationId": "put-results-id-approve-hod",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "result.routes.ts"
+      }
+    },
+    "/results/{id}/approve-admin": {
+      "put": {
+        "tags": [
+          "Results"
+        ],
+        "summary": "Auto-generated for PUT /results/:id/approve-admin",
+        "operationId": "put-results-id-approve-admin",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "result.routes.ts"
+      }
+    },
+    "/results/transcript/{studentId}": {
+      "get": {
+        "tags": [
+          "Results"
+        ],
+        "summary": "Auto-generated for GET /results/transcript/:studentId",
+        "operationId": "get-results-transcript-studentId",
+        "parameters": [
+          {
+            "name": "studentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "result.routes.ts"
+      }
+    },
+    "/results/summary/{studentId}": {
+      "get": {
+        "tags": [
+          "Results"
+        ],
+        "summary": "Auto-generated for GET /results/summary/:studentId",
+        "operationId": "get-results-summary-studentId",
+        "parameters": [
+          {
+            "name": "studentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "result.routes.ts"
+      }
+    },
+    "/results": {
+      "get": {
+        "tags": [
+          "Results"
+        ],
+        "summary": "Auto-generated for GET /results",
+        "operationId": "get-results",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "result.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Results"
+        ],
+        "summary": "Auto-generated for POST /results",
+        "operationId": "post-results",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "result.routes.ts"
+      }
+    },
+    "/results/{id}": {
+      "get": {
+        "tags": [
+          "Results"
+        ],
+        "summary": "Auto-generated for GET /results/:id",
+        "operationId": "get-results-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "result.routes.ts"
+      },
+      "put": {
+        "tags": [
+          "Results"
+        ],
+        "summary": "Auto-generated for PUT /results/:id",
+        "operationId": "put-results-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "result.routes.ts"
+      },
+      "delete": {
+        "tags": [
+          "Results"
+        ],
+        "summary": "Auto-generated for DELETE /results/:id",
+        "operationId": "delete-results-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "result.routes.ts"
+      }
+    },
+    "/payments/initialize": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Auto-generated for POST /payments/initialize",
+        "operationId": "post-payments-initialize",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "payment.routes.ts"
+      }
+    },
+    "/payments/verify/{reference}": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Auto-generated for GET /payments/verify/:reference",
+        "operationId": "get-payments-verify-reference",
+        "parameters": [
+          {
+            "name": "reference",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "payment.routes.ts"
+      }
+    },
+    "/payments": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Auto-generated for GET /payments",
+        "operationId": "get-payments",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "payment.routes.ts"
+      }
+    },
+    "/payments/{id}": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Auto-generated for GET /payments/:id",
+        "operationId": "get-payments-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "payment.routes.ts"
+      }
+    },
+    "/payments/{id}/verify": {
+      "put": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Auto-generated for PUT /payments/:id/verify",
+        "operationId": "put-payments-id-verify",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "payment.routes.ts"
+      }
+    },
+    "/payments/{id}/reject": {
+      "put": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Auto-generated for PUT /payments/:id/reject",
+        "operationId": "put-payments-id-reject",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "payment.routes.ts"
+      }
+    },
+    "/payments/{id}/receipt": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Auto-generated for GET /payments/:id/receipt",
+        "operationId": "get-payments-id-receipt",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "payment.routes.ts"
+      }
+    },
+    "/payments/stats/overview": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Auto-generated for GET /payments/stats/overview",
+        "operationId": "get-payments-stats-overview",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "payment.routes.ts"
+      }
+    },
+    "/payments/student/{studentId}": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Auto-generated for GET /payments/student/:studentId",
+        "operationId": "get-payments-student-studentId",
+        "parameters": [
+          {
+            "name": "studentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "payment.routes.ts"
+      }
+    },
+    "/hostels/apply": {
+      "post": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Auto-generated for POST /hostels/apply",
+        "operationId": "post-hostels-apply",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hostel.routes.ts"
+      }
+    },
+    "/hostels/applications": {
+      "get": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Auto-generated for GET /hostels/applications",
+        "operationId": "get-hostels-applications",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hostel.routes.ts"
+      }
+    },
+    "/hostels/applications/{id}": {
+      "get": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Auto-generated for GET /hostels/applications/:id",
+        "operationId": "get-hostels-applications-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hostel.routes.ts"
+      }
+    },
+    "/hostels/applications/{id}/approve": {
+      "put": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Auto-generated for PUT /hostels/applications/:id/approve",
+        "operationId": "put-hostels-applications-id-approve",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hostel.routes.ts"
+      }
+    },
+    "/hostels/applications/{id}/reject": {
+      "put": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Auto-generated for PUT /hostels/applications/:id/reject",
+        "operationId": "put-hostels-applications-id-reject",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hostel.routes.ts"
+      }
+    },
+    "/hostels/applications/{id}/allocate": {
+      "put": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Auto-generated for PUT /hostels/applications/:id/allocate",
+        "operationId": "put-hostels-applications-id-allocate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hostel.routes.ts"
+      }
+    },
+    "/hostels/stats/overview": {
+      "get": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Auto-generated for GET /hostels/stats/overview",
+        "operationId": "get-hostels-stats-overview",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hostel.routes.ts"
+      }
+    },
+    "/hostels": {
+      "get": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Auto-generated for GET /hostels",
+        "operationId": "get-hostels",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hostel.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Auto-generated for POST /hostels",
+        "operationId": "post-hostels",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hostel.routes.ts"
+      }
+    },
+    "/hostels/{id}": {
+      "get": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Auto-generated for GET /hostels/:id",
+        "operationId": "get-hostels-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hostel.routes.ts"
+      },
+      "put": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Auto-generated for PUT /hostels/:id",
+        "operationId": "put-hostels-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hostel.routes.ts"
+      },
+      "delete": {
+        "tags": [
+          "Hostels"
+        ],
+        "summary": "Auto-generated for DELETE /hostels/:id",
+        "operationId": "delete-hostels-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hostel.routes.ts"
+      }
+    },
+    "/users/search": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Auto-generated for GET /users/search",
+        "operationId": "get-users-search",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "user.routes.ts"
+      }
+    },
+    "/users/account": {
+      "delete": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Auto-generated for DELETE /users/account",
+        "operationId": "delete-users-account",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "user.routes.ts"
+      }
+    },
+    "/users/stats/overview": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Auto-generated for GET /users/stats/overview",
+        "operationId": "get-users-stats-overview",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "user.routes.ts"
+      }
+    },
+    "/users/students/by-department/{departmentId}": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Auto-generated for GET /users/students/by-department/:departmentId",
+        "operationId": "get-users-students-by-department-departmentId",
+        "parameters": [
+          {
+            "name": "departmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "user.routes.ts"
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Auto-generated for GET /users",
+        "operationId": "get-users",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "user.routes.ts"
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Auto-generated for GET /users/:id",
+        "operationId": "get-users-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "user.routes.ts"
+      },
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Auto-generated for PUT /users/:id",
+        "operationId": "put-users-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "user.routes.ts"
+      },
+      "delete": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Auto-generated for DELETE /users/:id",
+        "operationId": "delete-users-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "user.routes.ts"
+      }
+    },
+    "/users/{id}/avatar": {
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Auto-generated for PUT /users/:id/avatar",
+        "operationId": "put-users-id-avatar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "user.routes.ts"
+      }
+    },
+    "/users/{id}/password": {
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Auto-generated for PUT /users/:id/password",
+        "operationId": "put-users-id-password",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "user.routes.ts"
+      }
+    },
+    "/users/{id}/activate": {
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Auto-generated for PUT /users/:id/activate",
+        "operationId": "put-users-id-activate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "user.routes.ts"
+      }
+    },
+    "/users/{id}/role": {
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Auto-generated for PUT /users/:id/role",
+        "operationId": "put-users-id-role",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "user.routes.ts"
+      }
+    },
+    "/notifications/recent": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Auto-generated for GET /notifications/recent",
+        "operationId": "get-notifications-recent",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "notification.routes.ts"
+      }
+    },
+    "/notifications/unread/count": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Auto-generated for GET /notifications/unread/count",
+        "operationId": "get-notifications-unread-count",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "notification.routes.ts"
+      }
+    },
+    "/notifications/read-all": {
+      "put": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Auto-generated for PUT /notifications/read-all",
+        "operationId": "put-notifications-read-all",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "notification.routes.ts"
+      }
+    },
+    "/notifications/clear-read": {
+      "delete": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Auto-generated for DELETE /notifications/clear-read",
+        "operationId": "delete-notifications-clear-read",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "notification.routes.ts"
+      }
+    },
+    "/notifications": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Auto-generated for GET /notifications",
+        "operationId": "get-notifications",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "notification.routes.ts"
+      }
+    },
+    "/notifications/{id}": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Auto-generated for GET /notifications/:id",
+        "operationId": "get-notifications-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "notification.routes.ts"
+      },
+      "delete": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Auto-generated for DELETE /notifications/:id",
+        "operationId": "delete-notifications-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "notification.routes.ts"
+      }
+    },
+    "/notifications/{id}/read": {
+      "put": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Auto-generated for PUT /notifications/:id/read",
+        "operationId": "put-notifications-id-read",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "notification.routes.ts"
+      }
+    },
+    "/messages/unread/count": {
+      "get": {
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Auto-generated for GET /messages/unread/count",
+        "operationId": "get-messages-unread-count",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "message.routes.ts"
+      }
+    },
+    "/messages": {
+      "get": {
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Auto-generated for GET /messages",
+        "operationId": "get-messages",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "message.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Auto-generated for POST /messages",
+        "operationId": "post-messages",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "message.routes.ts"
+      }
+    },
+    "/messages/{id}": {
+      "get": {
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Auto-generated for GET /messages/:id",
+        "operationId": "get-messages-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "message.routes.ts"
+      },
+      "delete": {
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Auto-generated for DELETE /messages/:id",
+        "operationId": "delete-messages-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "message.routes.ts"
+      }
+    },
+    "/messages/{id}/read": {
+      "put": {
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Auto-generated for PUT /messages/:id/read",
+        "operationId": "put-messages-id-read",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "message.routes.ts"
+      }
+    },
+    "/students/attendance": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/attendance",
+        "operationId": "get-students-attendance",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "attendance.routes.ts"
+      }
+    },
+    "/lecturers/attendance": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/attendance",
+        "operationId": "get-lecturers-attendance",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "attendance.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for POST /lecturers/attendance",
+        "operationId": "post-lecturers-attendance",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "attendance.routes.ts"
+      }
+    },
+    "/lecturers/attendance/history": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/attendance/history",
+        "operationId": "get-lecturers-attendance-history",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "attendance.routes.ts"
+      }
+    },
+    "/lecturers/attendance/{id}": {
+      "put": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for PUT /lecturers/attendance/:id",
+        "operationId": "put-lecturers-attendance-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "attendance.routes.ts"
+      },
+      "delete": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for DELETE /lecturers/attendance/:id",
+        "operationId": "delete-lecturers-attendance-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "attendance.routes.ts"
+      }
+    },
+    "/students/scholarships": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/scholarships",
+        "operationId": "get-students-scholarships",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "scholarship.routes.ts"
+      }
+    },
+    "/students/scholarships/apply": {
+      "post": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for POST /students/scholarships/apply",
+        "operationId": "post-students-scholarships-apply",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "scholarship.routes.ts"
+      }
+    },
+    "/students/scholarships/applications": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/scholarships/applications",
+        "operationId": "get-students-scholarships-applications",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "scholarship.routes.ts"
+      }
+    },
+    "/bursary/scholarships": {
+      "get": {
+        "tags": [
+          "Bursary"
+        ],
+        "summary": "Auto-generated for GET /bursary/scholarships",
+        "operationId": "get-bursary-scholarships",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "scholarship.routes.ts"
+      }
+    },
+    "/bursary/scholarships/create": {
+      "post": {
+        "tags": [
+          "Bursary"
+        ],
+        "summary": "Auto-generated for POST /bursary/scholarships/create",
+        "operationId": "post-bursary-scholarships-create",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "scholarship.routes.ts"
+      }
+    },
+    "/bursary/scholarships/{id}": {
+      "get": {
+        "tags": [
+          "Bursary"
+        ],
+        "summary": "Auto-generated for GET /bursary/scholarships/:id",
+        "operationId": "get-bursary-scholarships-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "scholarship.routes.ts"
+      }
+    },
+    "/bursary/scholarships/{id}/approve": {
+      "post": {
+        "tags": [
+          "Bursary"
+        ],
+        "summary": "Auto-generated for POST /bursary/scholarships/:id/approve",
+        "operationId": "post-bursary-scholarships-id-approve",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "scholarship.routes.ts"
+      }
+    },
+    "/bursary/scholarships/{id}/reject": {
+      "post": {
+        "tags": [
+          "Bursary"
+        ],
+        "summary": "Auto-generated for POST /bursary/scholarships/:id/reject",
+        "operationId": "post-bursary-scholarships-id-reject",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "scholarship.routes.ts"
+      }
+    },
+    "/students/clearance": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/clearance",
+        "operationId": "get-students-clearance",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "clearance.routes.ts"
+      }
+    },
+    "/students/clearance/documents/request": {
+      "post": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for POST /students/clearance/documents/request",
+        "operationId": "post-students-clearance-documents-request",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "clearance.routes.ts"
+      }
+    },
+    "/admin/clearance": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/clearance",
+        "operationId": "get-admin-clearance",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "clearance.routes.ts"
+      }
+    },
+    "/admin/clearance/{id}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/clearance/:id",
+        "operationId": "get-admin-clearance-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "clearance.routes.ts"
+      }
+    },
+    "/admin/clearance/{id}/departments": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for POST /admin/clearance/:id/departments",
+        "operationId": "post-admin-clearance-id-departments",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "clearance.routes.ts"
+      }
+    },
+    "/admin/clearance/{id}/approve": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for POST /admin/clearance/:id/approve",
+        "operationId": "post-admin-clearance-id-approve",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "clearance.routes.ts"
+      }
+    },
+    "/admin/clearance/{id}/reject": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for POST /admin/clearance/:id/reject",
+        "operationId": "post-admin-clearance-id-reject",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "clearance.routes.ts"
+      }
+    },
+    "/students/results/appeal": {
+      "post": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for POST /students/results/appeal",
+        "operationId": "post-students-results-appeal",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "appeal.routes.ts"
+      }
+    },
+    "/students/results/appeals": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/results/appeals",
+        "operationId": "get-students-results-appeals",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "appeal.routes.ts"
+      }
+    },
+    "/students/courses": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/courses",
+        "operationId": "get-students-courses",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/courses/{id}": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/courses/:id",
+        "operationId": "get-students-courses-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/courses/{id}/materials": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/courses/:id/materials",
+        "operationId": "get-students-courses-id-materials",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/courses/{id}/materials/{materialId}/download": {
+      "post": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for POST /students/courses/:id/materials/:materialId/download",
+        "operationId": "post-students-courses-id-materials-materialId-download",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "materialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/enrollment/available-courses": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/enrollment/available-courses",
+        "operationId": "get-students-enrollment-available-courses",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/enrollment": {
+      "post": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for POST /students/enrollment",
+        "operationId": "post-students-enrollment",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/enrollment/{courseId}": {
+      "delete": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for DELETE /students/enrollment/:courseId",
+        "operationId": "delete-students-enrollment-courseId",
+        "parameters": [
+          {
+            "name": "courseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/assignments": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/assignments",
+        "operationId": "get-students-assignments",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/assignments/{id}": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/assignments/:id",
+        "operationId": "get-students-assignments-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/assignments/{id}/submission": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/assignments/:id/submission",
+        "operationId": "get-students-assignments-id-submission",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/quizzes": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/quizzes",
+        "operationId": "get-students-quizzes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/quizzes/{id}": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/quizzes/:id",
+        "operationId": "get-students-quizzes-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/quizzes/{id}/start": {
+      "post": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for POST /students/quizzes/:id/start",
+        "operationId": "post-students-quizzes-id-start",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/quizzes/{id}/results": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/quizzes/:id/results",
+        "operationId": "get-students-quizzes-id-results",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/results/transcript": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/results/transcript",
+        "operationId": "get-students-results-transcript",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/payments/{id}": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/payments/:id",
+        "operationId": "get-students-payments-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/hostel": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/hostel",
+        "operationId": "get-students-hostel",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/hostel/apply": {
+      "post": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for POST /students/hostel/apply",
+        "operationId": "post-students-hostel-apply",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/hostel/application": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/hostel/application",
+        "operationId": "get-students-hostel-application",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/messages": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/messages",
+        "operationId": "get-students-messages",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for POST /students/messages",
+        "operationId": "post-students-messages",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/messages/{id}": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/messages/:id",
+        "operationId": "get-students-messages-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/notifications": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/notifications",
+        "operationId": "get-students-notifications",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/notifications/{id}/read": {
+      "put": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for PUT /students/notifications/:id/read",
+        "operationId": "put-students-notifications-id-read",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/notifications/read-all": {
+      "put": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for PUT /students/notifications/read-all",
+        "operationId": "put-students-notifications-read-all",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/notifications/{id}": {
+      "delete": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for DELETE /students/notifications/:id",
+        "operationId": "delete-students-notifications-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/timetable": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/timetable",
+        "operationId": "get-students-timetable",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/id-card": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/id-card",
+        "operationId": "get-students-id-card",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/students/payments/installments": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/payments/installments",
+        "operationId": "get-students-payments-installments",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for POST /students/payments/installments",
+        "operationId": "post-students-payments-installments",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "student.routes.ts"
+      }
+    },
+    "/lecturers/courses": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/courses",
+        "operationId": "get-lecturers-courses",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/courses/{id}": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/courses/:id",
+        "operationId": "get-lecturers-courses-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/courses/{id}/students": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/courses/:id/students",
+        "operationId": "get-lecturers-courses-id-students",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/courses/{id}/materials": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for POST /lecturers/courses/:id/materials",
+        "operationId": "post-lecturers-courses-id-materials",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/courses/{id}/materials/{materialId}": {
+      "delete": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for DELETE /lecturers/courses/:id/materials/:materialId",
+        "operationId": "delete-lecturers-courses-id-materials-materialId",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "materialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/assignments/{id}/submissions": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/assignments/:id/submissions",
+        "operationId": "get-lecturers-assignments-id-submissions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/assignments/{id}/submissions/{submissionId}/grade": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for POST /lecturers/assignments/:id/submissions/:submissionId/grade",
+        "operationId": "post-lecturers-assignments-id-submissions-submissionId-grade",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "submissionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/quizzes/{id}/responses": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/quizzes/:id/responses",
+        "operationId": "get-lecturers-quizzes-id-responses",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/results": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/results",
+        "operationId": "get-lecturers-results",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for POST /lecturers/results",
+        "operationId": "post-lecturers-results",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/results/{id}": {
+      "put": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for PUT /lecturers/results/:id",
+        "operationId": "put-lecturers-results-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/messages": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/messages",
+        "operationId": "get-lecturers-messages",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for POST /lecturers/messages",
+        "operationId": "post-lecturers-messages",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/messages/{id}": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/messages/:id",
+        "operationId": "get-lecturers-messages-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/students": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/students",
+        "operationId": "get-lecturers-students",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/students/{id}": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/students/:id",
+        "operationId": "get-lecturers-students-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/results/import": {
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for POST /lecturers/results/import",
+        "operationId": "post-lecturers-results-import",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/analytics": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/analytics",
+        "operationId": "get-lecturers-analytics",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/assignments": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/assignments",
+        "operationId": "get-lecturers-assignments",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for POST /lecturers/assignments",
+        "operationId": "post-lecturers-assignments",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/assignments/{id}": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/assignments/:id",
+        "operationId": "get-lecturers-assignments-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      },
+      "put": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for PUT /lecturers/assignments/:id",
+        "operationId": "put-lecturers-assignments-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      },
+      "delete": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for DELETE /lecturers/assignments/:id",
+        "operationId": "delete-lecturers-assignments-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/quizzes": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/quizzes",
+        "operationId": "get-lecturers-quizzes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for POST /lecturers/quizzes",
+        "operationId": "post-lecturers-quizzes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/lecturers/quizzes/{id}": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/quizzes/:id",
+        "operationId": "get-lecturers-quizzes-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      },
+      "put": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for PUT /lecturers/quizzes/:id",
+        "operationId": "put-lecturers-quizzes-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      },
+      "delete": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for DELETE /lecturers/quizzes/:id",
+        "operationId": "delete-lecturers-quizzes-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "lecturer.routes.ts"
+      }
+    },
+    "/hod/students": {
+      "get": {
+        "tags": [
+          "Hod"
+        ],
+        "summary": "Auto-generated for GET /hod/students",
+        "operationId": "get-hod-students",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hod.routes.ts"
+      }
+    },
+    "/hod/students/{id}": {
+      "get": {
+        "tags": [
+          "Hod"
+        ],
+        "summary": "Auto-generated for GET /hod/students/:id",
+        "operationId": "get-hod-students-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hod.routes.ts"
+      }
+    },
+    "/hod/staff": {
+      "get": {
+        "tags": [
+          "Hod"
+        ],
+        "summary": "Auto-generated for GET /hod/staff",
+        "operationId": "get-hod-staff",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hod.routes.ts"
+      }
+    },
+    "/hod/staff/{id}": {
+      "get": {
+        "tags": [
+          "Hod"
+        ],
+        "summary": "Auto-generated for GET /hod/staff/:id",
+        "operationId": "get-hod-staff-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hod.routes.ts"
+      }
+    },
+    "/hod/staff/{id}/assign-courses": {
+      "post": {
+        "tags": [
+          "Hod"
+        ],
+        "summary": "Auto-generated for POST /hod/staff/:id/assign-courses",
+        "operationId": "post-hod-staff-id-assign-courses",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hod.routes.ts"
+      }
+    },
+    "/hod/department": {
+      "get": {
+        "tags": [
+          "Hod"
+        ],
+        "summary": "Auto-generated for GET /hod/department",
+        "operationId": "get-hod-department",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hod.routes.ts"
+      },
+      "put": {
+        "tags": [
+          "Hod"
+        ],
+        "summary": "Auto-generated for PUT /hod/department",
+        "operationId": "put-hod-department",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hod.routes.ts"
+      }
+    },
+    "/hod/department/statistics": {
+      "get": {
+        "tags": [
+          "Hod"
+        ],
+        "summary": "Auto-generated for GET /hod/department/statistics",
+        "operationId": "get-hod-department-statistics",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hod.routes.ts"
+      }
+    },
+    "/hod/results/pending-approval": {
+      "get": {
+        "tags": [
+          "Hod"
+        ],
+        "summary": "Auto-generated for GET /hod/results/pending-approval",
+        "operationId": "get-hod-results-pending-approval",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hod.routes.ts"
+      }
+    },
+    "/hod/results/{id}": {
+      "get": {
+        "tags": [
+          "Hod"
+        ],
+        "summary": "Auto-generated for GET /hod/results/:id",
+        "operationId": "get-hod-results-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hod.routes.ts"
+      }
+    },
+    "/hod/results/{id}/approve": {
+      "post": {
+        "tags": [
+          "Hod"
+        ],
+        "summary": "Auto-generated for POST /hod/results/:id/approve",
+        "operationId": "post-hod-results-id-approve",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hod.routes.ts"
+      }
+    },
+    "/hod/results/{id}/reject": {
+      "post": {
+        "tags": [
+          "Hod"
+        ],
+        "summary": "Auto-generated for POST /hod/results/:id/reject",
+        "operationId": "post-hod-results-id-reject",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hod.routes.ts"
+      }
+    },
+    "/hod/analytics": {
+      "get": {
+        "tags": [
+          "Hod"
+        ],
+        "summary": "Auto-generated for GET /hod/analytics",
+        "operationId": "get-hod-analytics",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "hod.routes.ts"
+      }
+    },
+    "/bursary/reports": {
+      "get": {
+        "tags": [
+          "Bursary"
+        ],
+        "summary": "Auto-generated for GET /bursary/reports",
+        "operationId": "get-bursary-reports",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "bursary.routes.ts"
+      }
+    },
+    "/bursary/reports/generate": {
+      "post": {
+        "tags": [
+          "Bursary"
+        ],
+        "summary": "Auto-generated for POST /bursary/reports/generate",
+        "operationId": "post-bursary-reports-generate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "bursary.routes.ts"
+      }
+    },
+    "/bursary/payments": {
+      "get": {
+        "tags": [
+          "Bursary"
+        ],
+        "summary": "Auto-generated for GET /bursary/payments",
+        "operationId": "get-bursary-payments",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "bursary.routes.ts"
+      }
+    },
+    "/bursary/payments/{id}": {
+      "get": {
+        "tags": [
+          "Bursary"
+        ],
+        "summary": "Auto-generated for GET /bursary/payments/:id",
+        "operationId": "get-bursary-payments-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "bursary.routes.ts"
+      }
+    },
+    "/bursary/payments/{id}/verify": {
+      "post": {
+        "tags": [
+          "Bursary"
+        ],
+        "summary": "Auto-generated for POST /bursary/payments/:id/verify",
+        "operationId": "post-bursary-payments-id-verify",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "bursary.routes.ts"
+      }
+    },
+    "/bursary/payments/{id}/reject": {
+      "post": {
+        "tags": [
+          "Bursary"
+        ],
+        "summary": "Auto-generated for POST /bursary/payments/:id/reject",
+        "operationId": "post-bursary-payments-id-reject",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "bursary.routes.ts"
+      }
+    },
+    "/admin/users/bulk-upload": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for POST /admin/users/bulk-upload",
+        "operationId": "post-admin-users-bulk-upload",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/hostel/{hostelId}/rooms/{roomNumber}/assign": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for POST /admin/hostel/:hostelId/rooms/:roomNumber/assign",
+        "operationId": "post-admin-hostel-hostelId-rooms-roomNumber-assign",
+        "parameters": [
+          {
+            "name": "hostelId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "roomNumber",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/hostel/{hostelId}/rooms/{roomNumber}/evict": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for POST /admin/hostel/:hostelId/rooms/:roomNumber/evict",
+        "operationId": "post-admin-hostel-hostelId-rooms-roomNumber-evict",
+        "parameters": [
+          {
+            "name": "hostelId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "roomNumber",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/hostel/{id}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/hostel/:id",
+        "operationId": "get-admin-hostel-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/hostel/applications": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/hostel/applications",
+        "operationId": "get-admin-hostel-applications",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/hostel/applications/{id}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/hostel/applications/:id",
+        "operationId": "get-admin-hostel-applications-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/hostel/applications/{id}/approve": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for POST /admin/hostel/applications/:id/approve",
+        "operationId": "post-admin-hostel-applications-id-approve",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/hostel/applications/{id}/reject": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for POST /admin/hostel/applications/:id/reject",
+        "operationId": "post-admin-hostel-applications-id-reject",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/financial": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/financial",
+        "operationId": "get-admin-financial",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/financial/generate-invoice": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for POST /admin/financial/generate-invoice",
+        "operationId": "post-admin-financial-generate-invoice",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/financial/send-reminder": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for POST /admin/financial/send-reminder",
+        "operationId": "post-admin-financial-send-reminder",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/financial/reports": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/financial/reports",
+        "operationId": "get-admin-financial-reports",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/financial/analytics": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/financial/analytics",
+        "operationId": "get-admin-financial-analytics",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/analytics": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/analytics",
+        "operationId": "get-admin-analytics",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/users",
+        "operationId": "get-admin-users",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for POST /admin/users",
+        "operationId": "post-admin-users",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/users/{id}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/users/:id",
+        "operationId": "get-admin-users-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      },
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for PUT /admin/users/:id",
+        "operationId": "put-admin-users-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      },
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for DELETE /admin/users/:id",
+        "operationId": "delete-admin-users-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/hostel/{hostelId}/rooms/{roomNumber}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/hostel/:hostelId/rooms/:roomNumber",
+        "operationId": "get-admin-hostel-hostelId-rooms-roomNumber",
+        "parameters": [
+          {
+            "name": "hostelId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "roomNumber",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      },
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for PUT /admin/hostel/:hostelId/rooms/:roomNumber",
+        "operationId": "put-admin-hostel-hostelId-rooms-roomNumber",
+        "parameters": [
+          {
+            "name": "hostelId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "roomNumber",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/courses": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/courses",
+        "operationId": "get-admin-courses",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for POST /admin/courses",
+        "operationId": "post-admin-courses",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/courses/{id}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/courses/:id",
+        "operationId": "get-admin-courses-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      },
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for PUT /admin/courses/:id",
+        "operationId": "put-admin-courses-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      },
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for DELETE /admin/courses/:id",
+        "operationId": "delete-admin-courses-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/hostel": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/hostel",
+        "operationId": "get-admin-hostel",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for POST /admin/hostel",
+        "operationId": "post-admin-hostel",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/announcements": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/announcements",
+        "operationId": "get-admin-announcements",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for POST /admin/announcements",
+        "operationId": "post-admin-announcements",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/announcements/{id}": {
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for PUT /admin/announcements/:id",
+        "operationId": "put-admin-announcements-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      },
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for DELETE /admin/announcements/:id",
+        "operationId": "delete-admin-announcements-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/admin/settings": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/settings",
+        "operationId": "get-admin-settings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      },
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for PUT /admin/settings",
+        "operationId": "put-admin-settings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "admin.routes.ts"
+      }
+    },
+    "/settings": {
+      "get": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Auto-generated for GET /settings",
+        "operationId": "get-settings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "settings.routes.ts"
+      },
+      "put": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Auto-generated for PUT /settings",
+        "operationId": "put-settings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "settings.routes.ts"
+      }
+    },
+    "/files/{id}": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Auto-generated for GET /files/:id",
+        "operationId": "get-files-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "file.routes.ts"
+      },
+      "delete": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Auto-generated for DELETE /files/:id",
+        "operationId": "delete-files-id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "file.routes.ts"
+      }
+    },
+    "/students/dashboard": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Auto-generated for GET /students/dashboard",
+        "operationId": "get-students-dashboard",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "dashboard.routes.ts"
+      }
+    },
+    "/lecturers/dashboard": {
+      "get": {
+        "tags": [
+          "Lecturers"
+        ],
+        "summary": "Auto-generated for GET /lecturers/dashboard",
+        "operationId": "get-lecturers-dashboard",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "dashboard.routes.ts"
+      }
+    },
+    "/hod/dashboard": {
+      "get": {
+        "tags": [
+          "Hod"
+        ],
+        "summary": "Auto-generated for GET /hod/dashboard",
+        "operationId": "get-hod-dashboard",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "dashboard.routes.ts"
+      }
+    },
+    "/bursary/dashboard": {
+      "get": {
+        "tags": [
+          "Bursary"
+        ],
+        "summary": "Auto-generated for GET /bursary/dashboard",
+        "operationId": "get-bursary-dashboard",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "dashboard.routes.ts"
+      }
+    },
+    "/admin/dashboard": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Auto-generated for GET /admin/dashboard",
+        "operationId": "get-admin-dashboard",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "dashboard.routes.ts"
+      }
+    },
+    "/webhooks/payment": {
+      "post": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Auto-generated for POST /webhooks/payment",
+        "operationId": "post-webhooks-payment",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "webhook.routes.ts"
+      }
+    },
+    "/webhooks/email": {
+      "post": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Auto-generated for POST /webhooks/email",
+        "operationId": "post-webhooks-email",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "webhook.routes.ts"
+      }
+    }
+  }
+}

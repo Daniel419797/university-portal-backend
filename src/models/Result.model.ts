@@ -17,6 +17,9 @@ export interface IResult extends Document {
   adminApprovedBy?: mongoose.Types.ObjectId;
   hodApprovedAt?: Date;
   adminApprovedAt?: Date;
+  hodRejectionReason?: string;
+  hodRejectedBy?: mongoose.Types.ObjectId;
+  hodRejectedAt?: Date;
   isPublished: boolean;
   publishedAt?: Date;
   createdAt: Date;
@@ -98,6 +101,12 @@ const resultSchema = new Schema<IResult>(
     },
     hodApprovedAt: Date,
     adminApprovedAt: Date,
+    hodRejectionReason: String,
+    hodRejectedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    hodRejectedAt: Date,
     isPublished: {
       type: Boolean,
       default: false,

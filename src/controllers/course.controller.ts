@@ -109,7 +109,7 @@ export const deleteCourse = asyncHandler(async (req: Request, res: Response) => 
 // Enroll in course
 export const enrollCourse = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const userId = req.user?.userId;
+  const userId = (req as any).user?.userId;
 
   const course = await Course.findById(id);
   if (!course) {
@@ -140,7 +140,7 @@ export const enrollCourse = asyncHandler(async (req: Request, res: Response) => 
 // Unenroll from course
 export const unenrollCourse = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const userId = req.user?.userId;
+  const userId = (req as any).user?.userId;
 
   const enrollment = await Enrollment.findOneAndUpdate(
     { student: userId, course: id, status: 'active' },

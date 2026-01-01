@@ -4,11 +4,11 @@ import { UserRole } from '../types';
 
 export const authorizeRoles = (...roles: UserRole[]) => {
   return (req: Request, _res: Response, next: NextFunction) => {
-    if (!req.user) {
+    if (!(req as any).user) {
       throw ApiError.unauthorized('Authentication required');
     }
 
-    if (!roles.includes(req.user.role as UserRole)) {
+    if (!roles.includes((req as any).user.role as UserRole)) {
       throw ApiError.forbidden('You do not have permission to access this resource');
     }
 
