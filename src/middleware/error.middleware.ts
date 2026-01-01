@@ -6,7 +6,7 @@ export const errorHandler = (
   err: Error | ApiError,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ) => {
   let error = err;
 
@@ -30,7 +30,7 @@ export const errorHandler = (
   res.status(statusCode).json(response);
 };
 
-export const notFoundHandler = (req: Request, res: Response, next: NextFunction) => {
+export const notFoundHandler = (req: Request, _res: Response, next: NextFunction) => {
   const error = ApiError.notFound(`Route ${req.originalUrl} not found`);
   next(error);
 };

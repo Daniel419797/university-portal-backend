@@ -3,7 +3,7 @@ import { ApiError } from '../utils/ApiError';
 import { UserRole } from '../types';
 
 export const authorizeRoles = (...roles: UserRole[]) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) {
       throw ApiError.unauthorized('Authentication required');
     }

@@ -10,7 +10,7 @@ export const generalLimiter = rateLimit({
   message: 'Too many requests from this IP, please try again later',
   standardHeaders: true,
   legacyHeaders: false,
-  handler: (req, res) => {
+  handler: (_req, _res) => {
     throw ApiError.badRequest('Too many requests from this IP, please try again later');
   },
 });

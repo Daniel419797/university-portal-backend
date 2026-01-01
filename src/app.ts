@@ -41,7 +41,7 @@ if (process.env.NODE_ENV !== 'test') {
 app.use('/api', generalLimiter);
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.status(200).json({
     success: true,
     message: 'Server is healthy',
@@ -52,7 +52,7 @@ app.get('/health', (req, res) => {
 });
 
 // API version info
-app.get('/api/v1', (req, res) => {
+app.get('/api/v1', (_req, res) => {
   res.status(200).json({
     success: true,
     message: 'University Portal API v1',
@@ -64,10 +64,9 @@ app.get('/api/v1', (req, res) => {
 // Swagger documentation
 setupSwagger(app);
 
-// API routes - will be added
-// app.use('/api/v1/auth', authRoutes);
-// app.use('/api/v1/users', userRoutes);
-// etc.
+// API routes
+import apiRoutes from './routes/v1';
+app.use('/api/v1', apiRoutes);
 
 logger.info('Express app configured successfully');
 
