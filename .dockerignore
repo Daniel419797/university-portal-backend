@@ -13,6 +13,7 @@ coverage
 *.md
 .eslintrc.js
 .prettierrc.js
-tsconfig.json
+# tsconfig is required for builds
+# tsconfig.json
 jest.config.js
 nodemon.json
