@@ -2,9 +2,8 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
-# Install deps for build (works with or without lockfile)
+# Install deps for build (no lockfile in context)
 COPY package.json ./
-COPY package-lock.json ./
 RUN npm install
 
 # Build source
@@ -18,7 +17,6 @@ ENV NODE_ENV=production
 
 # Install only production deps
 COPY package.json ./
-COPY package-lock.json ./
 RUN npm install --omit=dev && npm cache clean --force
 
 # Copy built assets from builder
