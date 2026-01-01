@@ -22,8 +22,8 @@ RUN npm install --omit=dev && npm cache clean --force
 # Copy built assets from builder
 COPY --from=build /app/dist ./dist
 
-# Ensure writable logs directory for non-root user
-RUN mkdir -p /app/logs && chown node:node /app/logs
+# Ensure writable directories for non-root user
+RUN mkdir -p /app/logs /app/uploads && chown -R node:node /app/logs /app/uploads
 
 USER node
 EXPOSE 5000
