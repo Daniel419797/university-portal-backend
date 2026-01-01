@@ -4,6 +4,12 @@ import swaggerJsdoc from 'swagger-jsdoc';
 import { Express } from 'express';
 import swaggerUi from 'swagger-ui-express';
 
+const serverUrl =
+  process.env.SWAGGER_SERVER_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? 'https://university-portal-backend-1.onrender.com'
+    : `http://localhost:${process.env.PORT || 5000}`);
+
 const swaggerOptions: swaggerJsdoc.Options = {
   definition: {
     openapi: '3.0.0',
@@ -18,9 +24,7 @@ const swaggerOptions: swaggerJsdoc.Options = {
     },
     servers: [
       {
-        url: process.env.NODE_ENV === 'production' 
-          ? 'https://api.university.edu' 
-          : `http://localhost:${process.env.PORT || 5000}`,
+        url: serverUrl,
         description: process.env.NODE_ENV === 'production' ? 'Production server' : 'Development server',
       },
     ],

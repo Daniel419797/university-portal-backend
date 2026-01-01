@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "https://api.university.edu",
+      "url": "https://university-portal-backend-1.onrender.com",
       "description": "Production server"
     },
     {
