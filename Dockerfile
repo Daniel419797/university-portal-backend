@@ -1,16 +1,12 @@
-# Development stage
-FROM node:20-alpine AS development
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-CMD ["npm", "run", "dev"]
-
-# Build stage
+# Builder stage
 FROM node:20-alpine AS build
 WORKDIR /app
-COPY package*.json ./
+
+# Install all deps for build (needs lockfile)
+COPY package.json package-lock.json ./
 RUN npm ci
+
+# Build source
 COPY . .
 RUN npm run build
 
@@ -18,9 +14,14 @@ RUN npm run build
 FROM node:20-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
-COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+
+# Install only production deps using lockfile
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# Copy built assets from builder
 COPY --from=build /app/dist ./dist
+
 USER node
 EXPOSE 5000
 CMD ["node", "dist/server.js"]
