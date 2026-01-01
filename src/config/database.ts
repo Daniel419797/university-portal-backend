@@ -3,7 +3,10 @@ import logger from './logger';
 
 const connectDatabase = async (): Promise<void> => {
   try {
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/university_portal';
+    const mongoUri =
+      (process.env.NODE_ENV === 'test' && process.env.MONGODB_TEST_URI) ||
+      process.env.MONGODB_URI ||
+      'mongodb://localhost:27017/university_portal';
     
     await mongoose.connect(mongoUri, {
       maxPoolSize: 10,

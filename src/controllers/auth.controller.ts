@@ -7,6 +7,7 @@ import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '.
 import { generateRandomToken, hashToken } from '../utils/helpers';
 import { MAX_LOGIN_ATTEMPTS, EMAIL_VERIFICATION_EXPIRY, PASSWORD_RESET_EXPIRY } from '../utils/constants';
 import logger from '../config/logger';
+import emailService from '../services/email.service';
 
 // Register
 export const register = asyncHandler(async (req: Request, res: Response) => {
@@ -30,7 +31,12 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     emailVerificationExpiry: new Date(Date.now() + EMAIL_VERIFICATION_EXPIRY),
   });
 
-  // TODO: Send verification email
+  // Send verification email with the plain token (hashed version stored on user)
+  const sent = await emailService.sendVerificationEmail(user.email, verificationToken);
+  if (!sent) {
+    logger.warn(`Verification email not sent for ${user.email}`);
+  }
+
   logger.info(`User registered: ${user.email}`);
 
   res.status(201).json(
@@ -199,7 +205,11 @@ export const forgotPassword = asyncHandler(async (req: Request, res: Response) =
   user.passwordResetExpiry = new Date(Date.now() + PASSWORD_RESET_EXPIRY);
   await user.save();
 
-  // TODO: Send password reset email
+  const sent = await emailService.sendPasswordResetEmail(user.email, resetToken);
+  if (!sent) {
+    logger.warn(`Password reset email not sent for ${user.email}`);
+  }
+
   logger.info(`Password reset requested: ${user.email}`);
 
   res.status(200).json(

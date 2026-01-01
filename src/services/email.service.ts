@@ -5,6 +5,18 @@ import { EmailOptions } from '../types';
 export class EmailService {
   private transporter = getEmailTransporter();
 
+  private buildTemplate(title: string, content: string): string {
+    return `
+      <div style="font-family: Arial, sans-serif; background: #f5f7fb; padding: 24px;">
+        <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 8px; padding: 24px; border: 1px solid #e5e7eb;">
+          <h2 style="color: #111827; margin-top: 0;">${title}</h2>
+          <div style="color: #4b5563; line-height: 1.6;">${content}</div>
+          <p style="color: #9ca3af; font-size: 12px; margin-top: 24px;">If you did not request this action, you can safely ignore this email.</p>
+        </div>
+      </div>
+    `;
+  }
+
   async sendEmail(options: EmailOptions): Promise<boolean> {
     if (!this.transporter) {
       logger.warn('Email transporter not configured. Email not sent.');
@@ -31,13 +43,17 @@ export class EmailService {
 
   async sendVerificationEmail(email: string, token: string): Promise<boolean> {
     const verificationUrl = `${process.env.CLIENT_URL}/verify-email?token=${token}`;
-    const html = `
-      <h1>Email Verification</h1>
-      <p>Please verify your email address by clicking the link below:</p>
-      <a href="${verificationUrl}">Verify Email</a>
-      <p>This link will expire in 24 hours.</p>
-      <p>If you didn't create an account, please ignore this email.</p>
-    `;
+    const html = this.buildTemplate(
+      'Email Verification',
+      `
+        <p>Please verify your email address by clicking the button below:</p>
+        <p style="text-align:center; margin: 24px 0;">
+          <a href="${verificationUrl}" style="background:#2563eb; color:#ffffff; padding:12px 20px; border-radius:6px; text-decoration:none; display:inline-block;">Verify Email</a>
+        </p>
+        <p style="word-break: break-all;">If the button does not work, copy and paste this link into your browser:<br>${verificationUrl}</p>
+        <p>This link will expire in 24 hours.</p>
+      `
+    );
 
     return this.sendEmail({
       to: email,
@@ -48,13 +64,17 @@ export class EmailService {
 
   async sendPasswordResetEmail(email: string, token: string): Promise<boolean> {
     const resetUrl = `${process.env.CLIENT_URL}/reset-password?token=${token}`;
-    const html = `
-      <h1>Password Reset Request</h1>
-      <p>You requested to reset your password. Click the link below to proceed:</p>
-      <a href="${resetUrl}">Reset Password</a>
-      <p>This link will expire in 1 hour.</p>
-      <p>If you didn't request this, please ignore this email.</p>
-    `;
+    const html = this.buildTemplate(
+      'Password Reset Request',
+      `
+        <p>You requested to reset your password. Click the button below to proceed:</p>
+        <p style="text-align:center; margin: 24px 0;">
+          <a href="${resetUrl}" style="background:#2563eb; color:#ffffff; padding:12px 20px; border-radius:6px; text-decoration:none; display:inline-block;">Reset Password</a>
+        </p>
+        <p style="word-break: break-all;">If the button does not work, copy and paste this link into your browser:<br>${resetUrl}</p>
+        <p>This link will expire in 1 hour.</p>
+      `
+    );
 
     return this.sendEmail({
       to: email,
@@ -64,12 +84,14 @@ export class EmailService {
   }
 
   async sendWelcomeEmail(email: string, firstName: string): Promise<boolean> {
-    const html = `
-      <h1>Welcome to University Portal!</h1>
-      <p>Hello ${firstName},</p>
-      <p>Your account has been successfully created. You can now access the portal.</p>
-      <p>Thank you for joining us!</p>
-    `;
+    const html = this.buildTemplate(
+      'Welcome to University Portal',
+      `
+        <p>Hello ${firstName},</p>
+        <p>Your account has been successfully created. You can now access the portal.</p>
+        <p>Thank you for joining us!</p>
+      `
+    );
 
     return this.sendEmail({
       to: email,
@@ -83,12 +105,14 @@ export class EmailService {
     assignmentTitle: string,
     dueDate: Date
   ): Promise<boolean> {
-    const html = `
-      <h1>Assignment Reminder</h1>
-      <p>This is a reminder that your assignment "${assignmentTitle}" is due soon.</p>
-      <p><strong>Due Date:</strong> ${dueDate.toLocaleString()}</p>
-      <p>Please ensure you submit before the deadline.</p>
-    `;
+    const html = this.buildTemplate(
+      'Assignment Reminder',
+      `
+        <p>This is a reminder that your assignment "${assignmentTitle}" is due soon.</p>
+        <p><strong>Due Date:</strong> ${dueDate.toLocaleString()}</p>
+        <p>Please ensure you submit before the deadline.</p>
+      `
+    );
 
     return this.sendEmail({
       to: email,
@@ -101,11 +125,13 @@ export class EmailService {
     email: string,
     courseName: string
   ): Promise<boolean> {
-    const html = `
-      <h1>Results Published</h1>
-      <p>Your results for ${courseName} have been published.</p>
-      <p>Login to the portal to view your results.</p>
-    `;
+    const html = this.buildTemplate(
+      'Results Published',
+      `
+        <p>Your results for ${courseName} have been published.</p>
+        <p>Login to the portal to view your results.</p>
+      `
+    );
 
     return this.sendEmail({
       to: email,
