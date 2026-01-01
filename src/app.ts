@@ -10,6 +10,7 @@ import { requestLogger } from './middleware/logger.middleware';
 import { generalLimiter } from './middleware/rateLimit.middleware';
 import { setupSwagger } from './config/swagger';
 import logger from './config/logger';
+import { getEmailTransporter } from './config/email';
 
 const app: Express = express();
 
@@ -49,6 +50,24 @@ app.get('/health', (_req, res) => {
     uptime: process.uptime(),
     environment: process.env.NODE_ENV,
   });
+});
+
+// Email transporter health check
+app.get('/health/email', async (_req, res) => {
+  const transporter = getEmailTransporter();
+  if (!transporter) {
+    return res.status(503).json({ success: false, message: 'Email transporter not configured' });
+  }
+  try {
+    await transporter.verify();
+    return res.status(200).json({ success: true, message: 'Email transporter verified' });
+  } catch (error: any) {
+    return res.status(503).json({
+      success: false,
+      message: 'Email transporter verification failed',
+      error: error?.message,
+    });
+  }
 });
 
 // API version info

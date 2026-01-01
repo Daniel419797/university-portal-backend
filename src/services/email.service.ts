@@ -5,6 +5,10 @@ import { EmailOptions } from '../types';
 export class EmailService {
   private transporter = getEmailTransporter();
 
+  isConfigured(): boolean {
+    return Boolean(this.transporter);
+  }
+
   private buildTemplate(title: string, content: string): string {
     return `
       <div style="font-family: Arial, sans-serif; background: #f5f7fb; padding: 24px;">
@@ -32,8 +36,8 @@ export class EmailService {
         attachments: options.attachments,
       };
 
-      await this.transporter.sendMail(mailOptions);
-      logger.info(`Email sent to ${options.to}: ${options.subject}`);
+      const info = await this.transporter.sendMail(mailOptions);
+      logger.info(`Email sent to ${options.to}: ${options.subject} (messageId=${info.messageId}, response=${info.response || 'n/a'})`);
       return true;
     } catch (error) {
       logger.error('Failed to send email:', error);

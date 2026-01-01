@@ -332,6 +332,21 @@
     }
   ],
   "paths": {
+    "/health/email": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Email transporter health check",
+        "description": "Verifies SMTP transporter configuration and connectivity.",
+        "responses": {
+          "200": {
+            "description": "Transporter verified"
+          },
+          "503": {
+            "description": "Transporter not configured or verification failed"
+          }
+        }
+      }
+    },
     "/auth/login": {
       "post": {
         "tags": ["Auth"],
