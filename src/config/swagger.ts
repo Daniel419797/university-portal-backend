@@ -9,7 +9,7 @@ function normalizeBaseUrl(url: string): string {
   return url.trim().replace(/\/+$/, '');
 }
 
-function computeServerUrl(): string {
+function computeServerOrigin(): string {
   const explicit = process.env.SWAGGER_SERVER_URL;
   if (explicit) return normalizeBaseUrl(explicit);
 
@@ -26,8 +26,15 @@ function computeServerUrl(): string {
   // Local/dev fallback
   return `http://localhost:${process.env.PORT || 5000}`;
 }
+// Ensure the Swagger server URL includes the API base path (e.g., /api/v1)
+const apiBasePath = (() => {
+  const raw = process.env.API_BASE_PATH || '/api/v1';
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith('/')) return `/${trimmed.replace(/\/+/g, '/')}`;
+  return trimmed.replace(/\/+$/, '');
+})();
 
-const serverUrl = computeServerUrl();
+const serverUrl = `${computeServerOrigin()}${apiBasePath}`;
 
 const swaggerOptions: swaggerJsdoc.Options = {
   definition: {
@@ -83,14 +90,30 @@ function loadGeneratedSpec() {
 
 const resolvedSpec = loadGeneratedSpec() || swaggerSpec;
 
-// Ensure the server URL override applies even when loading swagger.generated.json
-if (serverUrl) {
-  (resolvedSpec as { servers?: Array<{ url: string; description?: string }> }).servers = [
+// Only override servers when explicitly provided via env;
+// otherwise, respect servers from the spec (e.g., swagger.generated.json)
+type Server = { url: string; description?: string };
+type SpecWithServers = { servers?: Server[] };
+
+if (process.env.SWAGGER_SERVER_URL) {
+  (resolvedSpec as SpecWithServers).servers = [
     {
-      url: serverUrl,
+      url: normalizeBaseUrl(process.env.SWAGGER_SERVER_URL),
       description: process.env.NODE_ENV === 'production' ? 'Production server' : 'Development server',
     },
   ];
+} else {
+  const spec = resolvedSpec as SpecWithServers;
+  const hasServers = Array.isArray(spec.servers) && spec.servers.length > 0;
+  if (!hasServers) {
+    // Fallback if no servers present at all
+    spec.servers = [
+      {
+        url: serverUrl,
+        description: process.env.NODE_ENV === 'production' ? 'Production server' : 'Development server',
+      },
+    ];
+  }
 }
 
 export const setupSwagger = (app: Express): void => {
