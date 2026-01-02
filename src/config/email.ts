@@ -20,22 +20,31 @@ const initializeEmail = (): void => {
     return;
   }
 
-  logger.info(`Initializing email transporter host=${emailHost} port=${emailPort} secure=${emailPort === 465}`);
+  const secure = emailPort === 465;
+  logger.info(`Initializing email transporter host=${emailHost} port=${emailPort} secure=${secure}`);
 
   transporter = nodemailer.createTransport({
     host: emailHost,
     port: emailPort,
-    secure: emailPort === 578,
+    secure,
     auth: {
       user: emailUser,
       pass: emailPassword,
     },
+    // Help make STARTTLS more deterministic on some hosts when using port 587
+    ...(secure ? {} : { requireTLS: true }),
+    tls: {
+      servername: emailHost,
+    },
+    connectionTimeout: 20000,
+    greetingTimeout: 20000,
+    socketTimeout: 20000,
   });
 
   transporter.verify((error) => {
     if (error) {
-      logger.error('Email configuration error:', error);
-      transporter = null;
+      // Keep transporter instance so /health/email can surface the real verify error.
+      logger.error('Email configuration error (verify failed):', error);
     } else {
       logger.info('Email transporter initialized successfully');
     }
