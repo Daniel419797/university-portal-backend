@@ -78,21 +78,25 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
     new Set((activeEnrollments || []).map((e) => e.course?.id).filter((v): v is string => Boolean(v)))
   );
 
-  const assignments = await getRows<AssignmentRow>(
-    db
-      .from('assignments')
-      .select('id,title,total_marks,due_date,course:course_id(id,title,code)')
-      .in('course_id', courseIds.length ? courseIds : ['__none__'])
-      .gte('due_date', new Date().toISOString())
-  );
+  const assignments = courseIds.length
+    ? await getRows<AssignmentRow>(
+        db
+          .from('assignments')
+          .select('id,title,total_marks,due_date,course:course_id(id,title,code)')
+          .in('course_id', courseIds)
+          .gte('due_date', new Date().toISOString())
+      )
+    : [];
 
-  const submitted = await getRows<SubmissionRow>(
-    db
-      .from('submissions')
-      .select('assignment_id')
-      .eq('student_id', userId)
-      .in('assignment_id', assignments.length ? assignments.map(a => a.id) : ['__none__'])
-  );
+  const submitted = assignments.length
+    ? await getRows<SubmissionRow>(
+        db
+          .from('submissions')
+          .select('assignment_id')
+          .eq('student_id', userId)
+          .in('assignment_id', assignments.map((a) => a.id))
+      )
+    : [];
   const submittedAssignmentIds = Array.from(new Set(submitted.map((s) => s.assignment_id))).filter(Boolean);
 
   const pendingAssignments = assignments.filter(a => !submittedAssignmentIds.includes(a.id)).length;
@@ -133,14 +137,16 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
       .limit(5)
   );
 
-  const recentAssignments = await getRows<AssignmentRow>(
-    db
-      .from('assignments')
-      .select('id,title,total_marks,due_date,course:course_id(id,title,code)')
-      .in('course_id', courseIds.length ? courseIds : ['__none__'])
-      .order('created_at', { ascending: false })
-      .limit(5)
-  );
+  const recentAssignments = courseIds.length
+    ? await getRows<AssignmentRow>(
+        db
+          .from('assignments')
+          .select('id,title,total_marks,due_date,course:course_id(id,title,code)')
+          .in('course_id', courseIds)
+          .order('created_at', { ascending: false })
+          .limit(5)
+      )
+    : [];
 
   const unreadNotifications = await getExactCount(
     db
