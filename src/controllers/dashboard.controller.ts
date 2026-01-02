@@ -132,11 +132,11 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
       .from('payments')
       .select('id,status,created_at')
       .eq('student_id', userId)
-      .eq('status', 'verified')
+      .eq('status', 'successful')
       .order('created_at', { ascending: false })
       .limit(1)
   );
-  const paymentStatus = latestPaymentRows.length > 0 ? 'Verified' : 'Pending';
+  const paymentStatus = latestPaymentRows.length > 0 ? 'Successful' : 'Pending';
 
   const recentCourses = await getRows<EnrollmentRow>(
     db
