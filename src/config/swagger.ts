@@ -4,11 +4,30 @@ import swaggerJsdoc from 'swagger-jsdoc';
 import { Express } from 'express';
 import swaggerUi from 'swagger-ui-express';
 
-const serverUrl =
-  process.env.SWAGGER_SERVER_URL ||
-  (process.env.NODE_ENV === 'production'
-    ? process.env.SWAGGER_SERVER_URL
-    : `http://localhost:${process.env.PORT || 5000}`);
+function normalizeBaseUrl(url: string): string {
+  // Swagger joins paths onto `servers[0].url`; a trailing slash causes `//path`.
+  return url.trim().replace(/\/+$/, '');
+}
+
+function computeServerUrl(): string {
+  const explicit = process.env.SWAGGER_SERVER_URL;
+  if (explicit) return normalizeBaseUrl(explicit);
+
+  // Common PaaS env vars (best-effort fallbacks)
+  const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN;
+  if (railwayDomain) return normalizeBaseUrl(`https://${railwayDomain}`);
+
+  const renderExternalUrl = process.env.RENDER_EXTERNAL_URL;
+  if (renderExternalUrl) return normalizeBaseUrl(renderExternalUrl);
+
+  const appUrl = process.env.APP_URL;
+  if (appUrl) return normalizeBaseUrl(appUrl);
+
+  // Local/dev fallback
+  return `http://localhost:${process.env.PORT || 5000}`;
+}
+
+const serverUrl = computeServerUrl();
 
 const swaggerOptions: swaggerJsdoc.Options = {
   definition: {
@@ -63,6 +82,16 @@ function loadGeneratedSpec() {
 }
 
 const resolvedSpec = loadGeneratedSpec() || swaggerSpec;
+
+// Ensure the server URL override applies even when loading swagger.generated.json
+if (serverUrl) {
+  (resolvedSpec as { servers?: Array<{ url: string; description?: string }> }).servers = [
+    {
+      url: serverUrl,
+      description: process.env.NODE_ENV === 'production' ? 'Production server' : 'Development server',
+    },
+  ];
+}
 
 export const setupSwagger = (app: Express): void => {
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(resolvedSpec));
