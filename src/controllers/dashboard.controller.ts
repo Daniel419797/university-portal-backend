@@ -29,7 +29,7 @@ type SubmissionRow = {
   student_id?: string;
   grade?: number | null;
 };
-type ResultRow = { id: string; grade_points?: number; course?: { id: string; credits?: number }; course_id?: string };
+type ResultRow = { id: string; grade?: string | null; total_score?: number | null; course?: { id: string; credits?: number }; course_id?: string };
 type ProfileRow = { id: string; first_name: string; last_name: string; email?: string; role?: string; department?: string; is_active?: boolean; created_at?: string };
 type PaymentRow = { id: string; amount: number; status: string; type?: string; created_at?: string; student?: ProfileRow };
 type QuizRow = { id: string; title?: string; course?: string };
@@ -104,14 +104,25 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
   const results = await getRows<ResultRow>(
     db
       .from('results')
-      .select('id, grade_points, course:course_id(id,credits)')
+      .select('id, grade, total_score, course:course_id(id,credits)')
       .eq('student_id', userId)
-      .eq('is_published', true)
+      .eq('status', 'approved')
   );
+
+  // Convert letter grades to grade points (4.0 scale)
+  const gradeToPoints = (grade: string | null | undefined): number => {
+    if (!grade) return 0;
+    const g = grade.toUpperCase();
+    if (g === 'A') return 4.0;
+    if (g === 'B') return 3.0;
+    if (g === 'C') return 2.0;
+    if (g === 'D') return 1.0;
+    return 0.0; // F or other
+  };
 
   let cgpa = 0;
   if (results.length > 0) {
-    const totalGradePoints = results.reduce((sum, r) => sum + (r.grade_points || 0), 0);
+    const totalGradePoints = results.reduce((sum, r) => sum + (gradeToPoints(r.grade) * (r.course?.credits || 0)), 0);
     const totalCredits = results.reduce((sum, r) => sum + (r.course?.credits || 0), 0);
     cgpa = totalCredits > 0 ? totalGradePoints / totalCredits : 0;
   }
