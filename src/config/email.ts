@@ -10,9 +10,17 @@ const initializeEmail = (): void => {
   const emailPassword = process.env.EMAIL_PASSWORD;
 
   if (!emailHost || !emailUser || !emailPassword) {
-    logger.warn('Email credentials not configured, email sending will be disabled');
+    const missing = [
+      !emailHost ? 'EMAIL_HOST' : null,
+      !process.env.EMAIL_PORT ? 'EMAIL_PORT' : null,
+      !emailUser ? 'EMAIL_USER' : null,
+      !emailPassword ? 'EMAIL_PASSWORD' : null,
+    ].filter(Boolean);
+    logger.warn(`Email credentials not configured, email sending will be disabled (missing: ${missing.join(', ')})`);
     return;
   }
+
+  logger.info(`Initializing email transporter host=${emailHost} port=${emailPort} secure=${emailPort === 465}`);
 
   transporter = nodemailer.createTransport({
     host: emailHost,

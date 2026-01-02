@@ -54,9 +54,28 @@ app.get('/health', (_req, res) => {
 
 // Email transporter health check
 app.get('/health/email', async (_req, res) => {
+  const requiredEnv = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASSWORD'] as const;
+  const missingEnv = requiredEnv.filter((key) => !process.env[key]);
+  if (missingEnv.length > 0) {
+    return res.status(503).json({
+      success: false,
+      message: 'Email environment variables missing',
+      missing: missingEnv,
+    });
+  }
+
   const transporter = getEmailTransporter();
   if (!transporter) {
-    return res.status(503).json({ success: false, message: 'Email transporter not configured' });
+    return res.status(503).json({
+      success: false,
+      message: 'Email transporter not initialized (check startup logs for email verify errors)',
+      config: {
+        host: process.env.EMAIL_HOST,
+        port: Number(process.env.EMAIL_PORT),
+        secure: String(process.env.EMAIL_PORT) === '465',
+        user: process.env.EMAIL_USER,
+      },
+    });
   }
   try {
     await transporter.verify();
