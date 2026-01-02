@@ -115,8 +115,17 @@ export const authenticate = asyncHandler(async (req: Request, _res: Response, ne
       };
 
       return next();
-    } catch (_err) {
-      throw ApiError.unauthorized('Invalid or expired token');
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      // Log detailed error for debugging JWT issues
+      console.error('[auth] Supabase token verification failed:', {
+        // authStrategy: process.env.AUTH_STRATEGY,
+        // supabaseUrl: process.env.SUPABASE_URL,
+        // issuer: process.env.SUPABASE_JWT_ISSUER,
+        // audience: process.env.SUPABASE_JWT_AUDIENCE,
+        error: errMsg,
+      });
+      throw ApiError.unauthorized(`Invalid or expired token: ${errMsg}`);
     }
   }
 
@@ -129,7 +138,9 @@ export const authenticate = asyncHandler(async (req: Request, _res: Response, ne
       role: decoded.role,
     };
     return next();
-  } catch (_err) {
-    throw ApiError.unauthorized('Invalid or expired token');
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error('[auth] Local token verification failed:', { error: errMsg });
+    throw ApiError.unauthorized(`Invalid or expired token: ${errMsg}`);
   }
 });

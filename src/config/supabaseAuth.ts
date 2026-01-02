@@ -66,7 +66,7 @@ export async function verifySupabaseAccessToken(token: string): Promise<Supabase
       {
         issuer,
         audience,
-        algorithms: ['RS256'],
+        algorithms: ['RS256', 'ES256'],
       },
       (err, decoded) => {
         if (err || !decoded) return reject(err || new Error('Token verification failed'));
