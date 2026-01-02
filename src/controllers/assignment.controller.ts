@@ -327,8 +327,8 @@ export const getAssignmentSubmissions = asyncHandler(async (req: Request, res: R
   if (!assignment) throw ApiError.notFound('Assignment not found');
 
   // Check authorization
-  const course = (assignment as any).courses;
-  if (req.user?.role !== USER_ROLES.ADMIN && course.lecturer_id !== userId) {
+  const course = (assignment as { courses?: Array<{ lecturer_id: string }> }).courses?.[0];
+  if (req.user?.role !== USER_ROLES.ADMIN && (!course || course.lecturer_id !== userId)) {
     throw ApiError.forbidden('You are not authorized to view submissions for this assignment');
   }
 
@@ -364,8 +364,8 @@ export const gradeSubmission = asyncHandler(async (req: Request, res: Response) 
   if (!assignment) throw ApiError.notFound('Assignment not found');
 
   // Check authorization
-  const course = (assignment as any).courses;
-  if (req.user?.role !== USER_ROLES.ADMIN && course.lecturer_id !== userId) {
+  const course = (assignment as { courses?: Array<{ lecturer_id: string }> }).courses?.[0];
+  if (req.user?.role !== USER_ROLES.ADMIN && (!course || course.lecturer_id !== userId)) {
     throw ApiError.forbidden('You are not authorized to grade submissions for this assignment');
   }
 

@@ -42,6 +42,12 @@ if (process.env.NODE_ENV !== 'test') {
 app.use('/api', generalLimiter);
 
 // Health check endpoint
+// Root endpoint for platform probes
+app.get('/', (_req, res) => {
+  res.status(200).json({ ok: true, message: 'University Portal API', docs: '/docs', health: '/health' });
+});
+
+// Health check endpoint
 app.get('/health', (_req, res) => {
   res.status(200).json({
     success: true,

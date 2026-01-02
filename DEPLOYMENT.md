@@ -246,7 +246,7 @@ CLOUDINARY_API_SECRET=your_api_secret
 
 # Email - Gmail
 EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
+EMAIL_PORT=465
 EMAIL_USER=your_email@gmail.com
 EMAIL_PASSWORD=your_app_specific_password
 EMAIL_FROM=University Portal <noreply@university.edu>

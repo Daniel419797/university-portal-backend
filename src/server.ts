@@ -2,7 +2,6 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import app from './app';
-import connectDatabase from './config/database';
 import connectRedis from './config/redis';
 import initializeCloudinary from './config/cloudinary';
 import initializeEmail from './config/email';
@@ -19,8 +18,7 @@ const startServer = async () => {
       logger.info('Supabase connectivity check passed');
     }
 
-    // Connect to MongoDB (legacy - will be removed once migration completes)
-    await connectDatabase();
+    // MongoDB connection removed in Supabase-only mode
 
     // Initialize Redis (optional)
     connectRedis();

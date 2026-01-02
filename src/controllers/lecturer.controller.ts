@@ -62,8 +62,11 @@ const gradePoints: Record<string, number> = {
 };
 
 const resolveLecturerId = (req: Request): string => {
-  const authUser = req.user!;
-  return authUser.userId;
+  const id = req.user?.userId || req.user?._id?.toString();
+  if (!id) {
+    throw ApiError.unauthorized('User not authenticated');
+  }
+  return id;
 };
 
 export const getLecturerCoursesList = asyncHandler(async (req: Request, res: Response) => {
@@ -142,7 +145,7 @@ export const getLecturerCourseStudents = asyncHandler(async (req: Request, res: 
 
 export const getLecturerStudents = asyncHandler(async (req: Request, res: Response) => {
   const db = supabaseAdmin();
-  const lecturerId = req.user!.userId as string;
+  const lecturerId = resolveLecturerId(req);
   const { courseId, search } = req.query;
 
   let cq = db.from('courses').select('id,title,code').eq('lecturer_id', lecturerId);
@@ -215,7 +218,7 @@ export const getLecturerStudents = asyncHandler(async (req: Request, res: Respon
 
 export const getLecturerStudentProfile = asyncHandler(async (req: Request, res: Response) => {
   const db = supabaseAdmin();
-  const lecturerId = req.user!.userId as string;
+  const lecturerId = resolveLecturerId(req);
   const { id: studentId } = req.params;
 
   const { data: courses, error: courseErr } = await db
@@ -315,7 +318,7 @@ export const getLecturerStudentProfile = asyncHandler(async (req: Request, res: 
 
 export const getLecturerAnalytics = asyncHandler(async (req: Request, res: Response) => {
   const db = supabaseAdmin();
-  const lecturerId = req.user!.userId as string;
+  const lecturerId = resolveLecturerId(req);
 
   const { data: courses, error: courseErr } = await db
     .from('courses')
@@ -352,7 +355,7 @@ export const getLecturerAnalytics = asyncHandler(async (req: Request, res: Respo
 
 export const importLecturerResults = asyncHandler(async (req: Request, res: Response) => {
   const db = supabaseAdmin();
-  const lecturerId = req.user!.userId as string;
+  const lecturerId = resolveLecturerId(req);
   const { results } = req.body as { results: Array<{ studentId: string; courseId: string; sessionId: string; semester: string; caScore: number | string; examScore: number | string }> };
 
   if (!Array.isArray(results) || results.length === 0) {

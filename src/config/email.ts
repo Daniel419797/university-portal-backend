@@ -5,7 +5,7 @@ let transporter: Transporter | null = null;
 
 const initializeEmail = (): void => {
   const emailHost = process.env.EMAIL_HOST;
-  const emailPort = parseInt(process.env.EMAIL_PORT || '587');
+  const emailPort = parseInt(process.env.EMAIL_PORT || '465');
   const emailUser = process.env.EMAIL_USER;
   const emailPassword = process.env.EMAIL_PASSWORD;
 
