@@ -96,6 +96,8 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     }
 
     const anon = supabaseAnon();
+    const redirectBase = process.env.CLIENT_URL || process.env.SITE_URL || '';
+    const emailRedirectTo = redirectBase ? `${redirectBase.replace(/\/+$/, '')}/verify-email` : undefined;
     const { data, error } = await anon.auth.signUp({
       email,
       password,
@@ -105,6 +107,7 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
           last_name: lastName,
           role,
         },
+        emailRedirectTo,
       },
     });
 
