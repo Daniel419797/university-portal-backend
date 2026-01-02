@@ -67,7 +67,7 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
   let q = db
     .from('profiles')
     .select(
-      'id,email,first_name,last_name,role,avatar,student_id,department_id,level,is_active,created_at,departments(name,code)',
+      'id,email,first_name,last_name,role,avatar,student_id,department_id,level,is_active,created_at,departments:departments!profiles_department_fk(name,code)',
       { count: 'exact' }
     )
     .order('created_at', { ascending: false })
@@ -125,7 +125,7 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
   const db = requireSupabaseAdmin();
   const { data, error } = await db
     .from('profiles')
-    .select('*,departments(name,code,faculty)')
+    .select('*,departments:departments!profiles_department_fk(name,code,faculty)')
     .eq('id', req.params.id)
     .maybeSingle();
 
@@ -513,7 +513,7 @@ export const getMyProfile = asyncHandler(async (req: Request, res: Response) => 
   const db = requireSupabaseAdmin();
   const { data, error } = await db
     .from('profiles')
-    .select('*,departments(name,code,faculty)')
+    .select('*,departments:departments!profiles_department_fk(name,code,faculty)')
     .eq('id', userId)
     .maybeSingle();
 
@@ -585,7 +585,7 @@ export const updateMyProfile = asyncHandler(async (req: Request, res: Response) 
     .from('profiles')
     .update(patch)
     .eq('id', userId)
-    .select('*,departments(name,code,faculty)')
+    .select('*,departments:departments!profiles_department_fk(name,code,faculty)')
     .single();
 
   if (error) throw ApiError.internal(`Failed to update profile: ${error.message}`);
