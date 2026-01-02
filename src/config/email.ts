@@ -25,7 +25,7 @@ const initializeEmail = (): void => {
   transporter = nodemailer.createTransport({
     host: emailHost,
     port: emailPort,
-    secure: emailPort === 465,
+    secure: emailPort === 587,
     auth: {
       user: emailUser,
       pass: emailPassword,
