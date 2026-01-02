@@ -1,13 +1,61 @@
+// =============================================================================
+// MIGRATION STATUS: AUTO-CONVERTED - REQUIRES MANUAL REVIEW
+// =============================================================================
+// This file has been automatically migrated from MongoDB to Supabase.
+// Search for /* MIGRATE: */ comments to find areas needing manual completion.
+// 
+// Key changes needed:
+// 1. Complete query conversions (findById, find, create, etc.)
+// 2. Add error handling for Supabase queries
+// 3. Convert .populate() to JOIN syntax
+// 4. Update field names (camelCase -> snake_case)
+// 5. Test all endpoints
+// 
+// Original backup: c:\Users\HP\Desktop\university-portal-backend\backup-mongodb-20260102-062910\quiz.controller.ts
+// =============================================================================
 import { Request, Response } from 'express';
-import Quiz from '../models/Quiz.model';
-import QuizAttempt from '../models/QuizAttempt.model';
-import Course from '../models/Course.model';
-import Enrollment from '../models/Enrollment.model';
+import { supabaseAdmin } from '../config/supabase';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiError } from '../utils/ApiError';
 import { ApiResponse } from '../utils/ApiResponse';
 import notificationService from '../services/notification.service';
 import { USER_ROLES } from '../utils/constants';
+
+// Typed rows
+interface QuizQuestion {
+  question: string;
+  options?: string[];
+  correctAnswer: string;
+  marks: number;
+}
+
+interface QuizRow {
+  id: string;
+  course_id: string;
+  title: string;
+  description?: string | null;
+  duration: number; // minutes
+  total_marks: number;
+  start_date: string; // ISO
+  end_date: string; // ISO
+  questions: QuizQuestion[];
+  created_by: string;
+  is_active: boolean;
+}
+
+interface QuizAttemptRow {
+  id: string;
+  quiz_id: string;
+  student_id: string;
+  total_marks: number;
+  duration: number;
+  started_at: string;
+  answers?: Array<{ questionIndex: number; answer: string; isCorrect: boolean; marksAwarded: number }> | null;
+  score?: number | null;
+  percentage?: number | null;
+  submitted_at?: string | null;
+  is_completed: boolean;
+}
 
 /**
  * @desc    Create new quiz
@@ -15,54 +63,76 @@ import { USER_ROLES } from '../utils/constants';
  * @access  Private (Lecturer, Admin)
  */
 export const createQuiz = asyncHandler(async (req: Request, res: Response) => {
+  const db = supabaseAdmin();
+  const userId = req.user?.userId || req.user?._id?.toString();
   const { course, title, description, duration, totalMarks, startDate, endDate, questions } =
-    req.body;
+    req.body as {
+      course: string;
+      title: string;
+      description?: string;
+      duration: number;
+      totalMarks: number;
+      startDate: string;
+      endDate: string;
+      questions: QuizQuestion[];
+    };
 
-  // Verify course exists
-  const courseExists = await Course.findById(course);
-  if (!courseExists) {
-    throw ApiError.notFound('Course not found');
-  }
+  if (!userId) throw ApiError.unauthorized('User not authenticated');
+  if (!course || !title || !duration || !totalMarks || !startDate || !endDate || !questions)
+    throw ApiError.badRequest('Missing required fields');
 
-  // Verify user is lecturer of this course or admin
-  if (
-    (req as any).user.role !== USER_ROLES.ADMIN &&
-    courseExists.lecturer.toString() !== (req as any).user._id.toString()
-  ) {
+  // Verify course exists and ownership
+  const { data: courseRow, error: courseErr } = await db
+    .from('courses')
+    .select('id, name, lecturer_id')
+    .eq('id', course)
+    .maybeSingle();
+  if (courseErr) throw ApiError.internal(`Failed to fetch course: ${courseErr.message}`);
+  if (!courseRow) throw ApiError.notFound('Course not found');
+  if (req.user?.role !== USER_ROLES.ADMIN && courseRow.lecturer_id !== userId) {
     throw ApiError.forbidden('You are not authorized to create quizzes for this course');
   }
 
-  // Validate total marks match sum of question marks
-  const calculatedTotal = questions.reduce((sum: number, q: any) => sum + q.marks, 0);
+  // Validate total marks
+  const calculatedTotal = questions.reduce((sum, q) => sum + (q.marks || 0), 0);
   if (calculatedTotal !== totalMarks) {
     throw ApiError.badRequest(
       `Total marks (${totalMarks}) must match sum of question marks (${calculatedTotal})`
     );
   }
 
-  const quiz = await Quiz.create({
-    course,
-    title,
-    description,
-    duration,
-    totalMarks,
-    startDate,
-    endDate,
-    questions,
-    createdBy: (req as any).user._id,
-    isActive: true,
-  });
+  // Insert quiz
+  const { data: quiz, error } = await db
+    .from('quizzes')
+    .insert({
+      course_id: course,
+      title,
+      description: description || null,
+      duration,
+      total_marks: totalMarks,
+      start_date: startDate,
+      end_date: endDate,
+      questions,
+      created_by: userId,
+      is_active: true,
+    })
+    .select()
+    .single();
+  if (error) throw ApiError.internal(`Failed to create quiz: ${error.message}`);
 
   // Notify enrolled students
-  const enrollments = await Enrollment.find({ course, status: 'active' }).select('student');
-  const studentIds = enrollments.map((e: any) => e.student);
-
+  const { data: enrollments } = await db
+    .from('enrollments')
+    .select('student_id')
+    .eq('course_id', course)
+    .eq('status', 'active');
+  const studentIds = (enrollments || []).map((e) => e.student_id);
   if (studentIds.length > 0) {
     await notificationService.createBulkNotifications(
       studentIds,
       'info',
       'New Quiz Available',
-      `New quiz "${title}" is available for ${(courseExists as any).name}. Duration: ${duration} minutes`
+      `New quiz "${title}" is available for ${courseRow.name}. Duration: ${duration} minutes`
     );
   }
 
@@ -75,45 +145,60 @@ export const createQuiz = asyncHandler(async (req: Request, res: Response) => {
  * @access  Private
  */
 export const getQuizzes = asyncHandler(async (req: Request, res: Response) => {
+  const db = supabaseAdmin();
+  const userId = req.user?.userId || req.user?._id?.toString();
   const { course, page = 1, limit = 20, active } = req.query;
 
-  const query: Record<string, unknown> = {};
-
-  if (course) query.course = course;
-  if (active !== undefined) query.isActive = active === 'true';
-
-  // If student, only show quizzes for enrolled courses
-  if ((req as any).user.role === USER_ROLES.STUDENT) {
-    const enrollments = await Enrollment.find({
-      student: (req as any).user._id,
-      status: 'active',
-    }).select('course');
-    const courseIds = enrollments.map((e: any) => e.course);
-    query.course = { $in: courseIds };
-  }
-
-  const pageNum = parseInt(page as string);
-  const limitNum = parseInt(limit as string);
+  const pageNum = parseInt(page as string) || 1;
+  const limitNum = parseInt(limit as string) || 20;
   const skip = (pageNum - 1) * limitNum;
 
-  const [quizzes, total] = await Promise.all([
-    Quiz.find(query)
-      .populate('course', 'name code')
-      .populate('createdBy', 'firstName lastName')
-      .select('-questions.correctAnswer') // Hide correct answers from list
-      .sort({ startDate: -1 })
-      .skip(skip)
-      .limit(limitNum),
-    Quiz.countDocuments(query),
-  ]);
+  let query = db.from('quizzes').select('*', { count: 'exact' });
+  if (course) query = query.eq('course_id', course as string);
+  if (active !== undefined) query = query.eq('is_active', String(active) === 'true');
+
+  // If student, only show quizzes for enrolled courses
+  if (req.user?.role === USER_ROLES.STUDENT) {
+    const { data: enrollments } = await db
+      .from('enrollments')
+      .select('course_id')
+      .eq('student_id', userId)
+      .eq('status', 'active');
+    const courseIds = (enrollments || []).map((e) => e.course_id);
+    if (courseIds.length === 0) {
+      res.json(
+        ApiResponse.success('Data retrieved successfully', {
+          quizzes: [],
+          pagination: { total: 0, page: pageNum, pages: 0, limit: limitNum },
+        })
+      );
+      return;
+    }
+    query = query.in('course_id', courseIds);
+  }
+
+  const { data, error, count } = await query
+    .order('start_date', { ascending: false })
+    .range(skip, skip + limitNum - 1);
+  if (error) throw ApiError.internal(`Failed to fetch quizzes: ${error.message}`);
+
+  const items = (data || []) as QuizRow[];
+  // Hide correctAnswer in response
+  const safeQuizzes = items.map((qz) => ({
+    ...qz,
+    questions: (qz.questions || []).map((q) => {
+      const { question, options, marks } = q as QuizQuestion;
+      return { question, options, marks };
+    }),
+  }));
 
   res.json(
     ApiResponse.success('Data retrieved successfully', {
-      quizzes,
+      quizzes: safeQuizzes,
       pagination: {
-        total,
+        total: count || 0,
         page: pageNum,
-        pages: Math.ceil(total / limitNum),
+        pages: Math.ceil((count || 0) / limitNum),
         limit: limitNum,
       },
     })
@@ -126,27 +211,31 @@ export const getQuizzes = asyncHandler(async (req: Request, res: Response) => {
  * @access  Private
  */
 export const getQuizById = asyncHandler(async (req: Request, res: Response) => {
-  const quiz = await Quiz.findById(req.params.id)
-    .populate('course', 'name code')
-    .populate('createdBy', 'firstName lastName');
+  const db = supabaseAdmin();
+  const { id } = req.params;
 
-  if (!quiz) {
-    throw ApiError.notFound('Quiz not found');
-  }
+  const { data: quiz, error } = await db
+    .from('quizzes')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw ApiError.internal(`Failed to fetch quiz: ${error.message}`);
+  if (!quiz) throw ApiError.notFound('Quiz not found');
 
-  // Hide correct answers from students
-  if ((req as any).user.role === USER_ROLES.STUDENT) {
-    const quizObj = quiz.toObject();
-    quizObj.questions = quizObj.questions.map((q: any) => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { correctAnswer, ...rest } = q;
-      return rest;
-    });
-    res.json(ApiResponse.success('Data retrieved successfully', quizObj));
+  const row = quiz as QuizRow;
+  if (req.user?.role === USER_ROLES.STUDENT) {
+    const safe = {
+      ...row,
+      questions: (row.questions || []).map((q) => {
+        const { question, options, marks } = q as QuizQuestion;
+        return { question, options, marks };
+      }),
+    };
+    res.json(ApiResponse.success('Data retrieved successfully', safe));
     return;
   }
 
-  res.json(ApiResponse.success('Data retrieved successfully', quiz));
+  res.json(ApiResponse.success('Data retrieved successfully', row));
 });
 
 /**
@@ -155,41 +244,60 @@ export const getQuizById = asyncHandler(async (req: Request, res: Response) => {
  * @access  Private (Lecturer who created it, Admin)
  */
 export const updateQuiz = asyncHandler(async (req: Request, res: Response) => {
-  const quiz = await Quiz.findById(req.params.id);
+  const db = supabaseAdmin();
+  const userId = req.user?.userId || req.user?._id?.toString();
+  const { id } = req.params;
 
-  if (!quiz) {
-    throw ApiError.notFound('Quiz not found');
-  }
+  const { data: quiz, error: fetchErr } = await db
+    .from('quizzes')
+    .select('id, created_by')
+    .eq('id', id)
+    .maybeSingle();
+  if (fetchErr) throw ApiError.internal(`Failed to fetch quiz: ${fetchErr.message}`);
+  if (!quiz) throw ApiError.notFound('Quiz not found');
 
-  // Check authorization
-  if (
-    (req as any).user.role !== USER_ROLES.ADMIN &&
-    quiz.createdBy.toString() !== (req as any).user._id.toString()
-  ) {
+  if (req.user?.role !== USER_ROLES.ADMIN && quiz.created_by !== userId) {
     throw ApiError.forbidden('You are not authorized to update this quiz');
   }
 
-  // Check if quiz has been attempted
-  const attempts = await QuizAttempt.countDocuments({ quiz: quiz._id });
-  if (attempts > 0) {
-    throw ApiError.badRequest('Cannot update quiz that has already been attempted');
-  }
+  const { count: attemptCount, error: countErr } = await db
+    .from('quiz_attempts')
+    .select('id', { count: 'exact', head: true })
+    .eq('quiz_id', id);
+  if (countErr) throw ApiError.internal(`Failed to count attempts: ${countErr.message}`);
+  if ((attemptCount || 0) > 0) throw ApiError.badRequest('Cannot update quiz that has already been attempted');
 
   const { title, description, duration, totalMarks, startDate, endDate, questions, isActive } =
-    req.body;
+    req.body as Partial<{
+      title: string;
+      description: string;
+      duration: number;
+      totalMarks: number;
+      startDate: string;
+      endDate: string;
+      questions: QuizQuestion[];
+      isActive: boolean;
+    }>;
 
-  if (title) quiz.title = title;
-  if (description) quiz.description = description;
-  if (duration) quiz.duration = duration;
-  if (totalMarks) quiz.totalMarks = totalMarks;
-  if (startDate) quiz.startDate = startDate;
-  if (endDate) quiz.endDate = endDate;
-  if (questions) quiz.questions = questions;
-  if (typeof isActive !== 'undefined') quiz.isActive = isActive;
+  const patch: Record<string, unknown> = {};
+  if (title !== undefined) patch.title = title;
+  if (description !== undefined) patch.description = description;
+  if (duration !== undefined) patch.duration = duration;
+  if (totalMarks !== undefined) patch.total_marks = totalMarks;
+  if (startDate !== undefined) patch.start_date = startDate;
+  if (endDate !== undefined) patch.end_date = endDate;
+  if (questions !== undefined) patch.questions = questions;
+  if (typeof isActive !== 'undefined') patch.is_active = isActive;
 
-  await quiz.save();
+  const { data: updated, error } = await db
+    .from('quizzes')
+    .update(patch)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw ApiError.internal(`Failed to update quiz: ${error.message}`);
 
-  res.json(ApiResponse.success('Quiz updated successfully', quiz));
+  res.json(ApiResponse.success('Quiz updated successfully', updated));
 });
 
 /**
@@ -198,21 +306,24 @@ export const updateQuiz = asyncHandler(async (req: Request, res: Response) => {
  * @access  Private (Lecturer who created it, Admin)
  */
 export const deleteQuiz = asyncHandler(async (req: Request, res: Response) => {
-  const quiz = await Quiz.findById(req.params.id);
+  const db = supabaseAdmin();
+  const userId = req.user?.userId || req.user?._id?.toString();
+  const { id } = req.params;
 
-  if (!quiz) {
-    throw ApiError.notFound('Quiz not found');
-  }
+  const { data: quiz, error: fetchErr } = await db
+    .from('quizzes')
+    .select('id, created_by')
+    .eq('id', id)
+    .maybeSingle();
+  if (fetchErr) throw ApiError.internal(`Failed to fetch quiz: ${fetchErr.message}`);
+  if (!quiz) throw ApiError.notFound('Quiz not found');
 
-  // Check authorization
-  if (
-    (req as any).user.role !== USER_ROLES.ADMIN &&
-    quiz.createdBy.toString() !== (req as any).user._id.toString()
-  ) {
+  if (req.user?.role !== USER_ROLES.ADMIN && quiz.created_by !== userId) {
     throw ApiError.forbidden('You are not authorized to delete this quiz');
   }
 
-  await quiz.deleteOne();
+  const { error: delErr } = await db.from('quizzes').delete().eq('id', id);
+  if (delErr) throw ApiError.internal(`Failed to delete quiz: ${delErr.message}`);
 
   res.json(ApiResponse.success('Quiz deleted successfully', null));
 });
@@ -223,65 +334,67 @@ export const deleteQuiz = asyncHandler(async (req: Request, res: Response) => {
  * @access  Private (Student)
  */
 export const startQuiz = asyncHandler(async (req: Request, res: Response) => {
-  const quiz = await Quiz.findById(req.params.id);
+  const db = supabaseAdmin();
+  const userId = req.user?.userId || req.user?._id?.toString();
+  const { id } = req.params;
+  if (!userId) throw ApiError.unauthorized('User not authenticated');
 
-  if (!quiz) {
-    throw ApiError.notFound('Quiz not found');
-  }
+  const { data: quiz, error: quizErr } = await db
+    .from('quizzes')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (quizErr) throw ApiError.internal(`Failed to fetch quiz: ${quizErr.message}`);
+  if (!quiz) throw ApiError.notFound('Quiz not found');
+  const q = quiz as QuizRow;
 
-  if (!quiz.isActive) {
-    throw ApiError.badRequest('Quiz is not active');
-  }
+  if (!q.is_active) throw ApiError.badRequest('Quiz is not active');
 
-  // Check if quiz is available
   const now = new Date();
-  if (now < quiz.startDate) {
-    throw ApiError.badRequest('Quiz has not started yet');
-  }
-  if (now > quiz.endDate) {
-    throw ApiError.badRequest('Quiz has ended');
-  }
+  if (now < new Date(q.start_date)) throw ApiError.badRequest('Quiz has not started yet');
+  if (now > new Date(q.end_date)) throw ApiError.badRequest('Quiz has ended');
 
-  // Check if student is enrolled
-  const enrollment = await Enrollment.findOne({
-    student: (req as any).user._id,
-    course: quiz.course,
-    status: 'active',
-  });
+  const { data: enrollment } = await db
+    .from('enrollments')
+    .select('id')
+    .eq('student_id', userId)
+    .eq('course_id', q.course_id)
+    .eq('status', 'active')
+    .maybeSingle();
+  if (!enrollment) throw ApiError.forbidden('You are not enrolled in this course');
 
-  if (!enrollment) {
-    throw ApiError.forbidden('You are not enrolled in this course');
-  }
+  const { data: existingAttempt } = await db
+    .from('quiz_attempts')
+    .select('id')
+    .eq('quiz_id', q.id)
+    .eq('student_id', userId)
+    .maybeSingle();
+  if (existingAttempt) throw ApiError.badRequest('You have already attempted this quiz');
 
-  // Check if already attempted
-  const existingAttempt = await QuizAttempt.findOne({
-    quiz: quiz._id,
-    student: (req as any).user._id,
-  });
+  const { data: attempt, error: attemptErr } = await db
+    .from('quiz_attempts')
+    .insert({
+      quiz_id: q.id,
+      student_id: userId,
+      total_marks: q.total_marks,
+      duration: q.duration,
+      started_at: new Date().toISOString(),
+      is_completed: false,
+    })
+    .select()
+    .single();
+  if (attemptErr) throw ApiError.internal(`Failed to start attempt: ${attemptErr.message}`);
 
-  if (existingAttempt) {
-    throw ApiError.badRequest('You have already attempted this quiz');
-  }
-
-  // Create quiz attempt
-  const attempt = await QuizAttempt.create({
-    quiz: quiz._id,
-    student: (req as any).user._id,
-    totalMarks: quiz.totalMarks,
-    duration: quiz.duration,
-    startedAt: new Date(),
-  });
-
-  // Return quiz without correct answers
-  const quizObj = quiz.toObject();
-  quizObj.questions = quizObj.questions.map((q: any) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { correctAnswer, ...rest } = q;
-    return rest;
-  });
+  const quizSafe = {
+    ...q,
+    questions: (q.questions || []).map((qq) => {
+      const { question, options, marks } = qq as QuizQuestion;
+      return { question, options, marks };
+    }),
+  };
 
   res.status(201).json(
-    ApiResponse.success('Quiz started successfully', { attemptId: attempt._id, quiz: quizObj })
+    ApiResponse.success('Quiz started successfully', { attemptId: attempt.id, quiz: quizSafe })
   );
 });
 
@@ -291,65 +404,73 @@ export const startQuiz = asyncHandler(async (req: Request, res: Response) => {
  * @access  Private (Student)
  */
 export const submitQuiz = asyncHandler(async (req: Request, res: Response) => {
-  const { answers } = req.body;
+  const db = supabaseAdmin();
+  const userId = req.user?.userId || req.user?._id?.toString();
+  const { id } = req.params;
+  const { answers } = req.body as { answers: Array<{ questionIndex: number; answer: string }> };
 
-  const quiz = await Quiz.findById(req.params.id);
-  if (!quiz) {
-    throw ApiError.notFound('Quiz not found');
-  }
+  if (!userId) throw ApiError.unauthorized('User not authenticated');
 
-  const attempt = await QuizAttempt.findOne({
-    quiz: quiz._id,
-    student: (req as any).user._id,
-  });
+  const { data: quiz, error: quizErr } = await db
+    .from('quizzes')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (quizErr) throw ApiError.internal(`Failed to fetch quiz: ${quizErr.message}`);
+  if (!quiz) throw ApiError.notFound('Quiz not found');
+  const q = quiz as QuizRow;
 
-  if (!attempt) {
-    throw ApiError.notFound('Quiz attempt not found');
-  }
+  const { data: attempt, error: attemptErr } = await db
+    .from('quiz_attempts')
+    .select('*')
+    .eq('quiz_id', q.id)
+    .eq('student_id', userId)
+    .maybeSingle();
+  if (attemptErr) throw ApiError.internal(`Failed to fetch attempt: ${attemptErr.message}`);
+  if (!attempt) throw ApiError.notFound('Quiz attempt not found');
+  const a = attempt as QuizAttemptRow;
+  if (a.is_completed) throw ApiError.badRequest('Quiz has already been submitted');
 
-  if (attempt.isCompleted) {
-    throw ApiError.badRequest('Quiz has already been submitted');
-  }
+  const elapsedMinutes = (Date.now() - new Date(a.started_at).getTime()) / 60000;
+  if (elapsedMinutes > q.duration + 5) throw ApiError.badRequest('Time limit exceeded');
 
-  // Check if time limit exceeded
-  const elapsedMinutes = (Date.now() - attempt.startedAt.getTime()) / 60000;
-  if (elapsedMinutes > quiz.duration + 5) {
-    // 5 min grace period
-    throw ApiError.badRequest('Time limit exceeded');
-  }
-
-  // Grade the quiz
-  const gradedAnswers = answers.map((ans: any) => {
-    const question = quiz.questions[ans.questionIndex];
-    const isCorrect = ans.answer.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim();
+  const gradedAnswers = answers.map((ans) => {
+    const question = (q.questions || [])[ans.questionIndex];
+    const isCorrect =
+      !!question && ans.answer.toLowerCase().trim() === String(question.correctAnswer).toLowerCase().trim();
     return {
       questionIndex: ans.questionIndex,
       answer: ans.answer,
       isCorrect,
-      marksAwarded: isCorrect ? question.marks : 0,
+      marksAwarded: isCorrect ? (question?.marks || 0) : 0,
     };
   });
 
-  const score = gradedAnswers.reduce((sum: number, ans: any) => sum + ans.marksAwarded, 0);
-  const percentage = (score / quiz.totalMarks) * 100;
+  const score = gradedAnswers.reduce((sum, ans) => sum + (ans.marksAwarded || 0), 0);
+  const percentage = q.total_marks > 0 ? (score / q.total_marks) * 100 : 0;
 
-  attempt.answers = gradedAnswers;
-  attempt.score = score;
-  attempt.percentage = percentage;
-  attempt.submittedAt = new Date();
-  attempt.isCompleted = true;
+  const { data: updated, error: updateErr } = await db
+    .from('quiz_attempts')
+    .update({
+      answers: gradedAnswers,
+      score,
+      percentage,
+      submitted_at: new Date().toISOString(),
+      is_completed: true,
+    })
+    .eq('id', a.id)
+    .select()
+    .single();
+  if (updateErr) throw ApiError.internal(`Failed to submit attempt: ${updateErr.message}`);
 
-  await attempt.save();
-
-  // Notify student
   await notificationService.createNotification(
-    (req as any).user._id,
+    userId,
     'success',
     'Quiz Submitted',
-    `You scored ${score}/${quiz.totalMarks} (${percentage.toFixed(1)}%) on "${quiz.title}"`
+    `You scored ${score}/${q.total_marks} (${percentage.toFixed(1)}%) on "${q.title}"`
   );
 
-  res.json(ApiResponse.success('Quiz submitted successfully', attempt));
+  res.json(ApiResponse.success('Quiz submitted successfully', updated));
 });
 
 /**
@@ -358,41 +479,48 @@ export const submitQuiz = asyncHandler(async (req: Request, res: Response) => {
  * @access  Private (Lecturer, Admin)
  */
 export const getQuizAttempts = asyncHandler(async (req: Request, res: Response) => {
-  const quiz = await Quiz.findById(req.params.id).populate('course');
+  const db = supabaseAdmin();
+  const userId = req.user?.userId || req.user?._id?.toString();
+  const { id } = req.params;
 
-  if (!quiz) {
-    throw ApiError.notFound('Quiz not found');
-  }
+  const { data: quiz, error: quizErr } = await db
+    .from('quizzes')
+    .select('id, course_id')
+    .eq('id', id)
+    .maybeSingle();
+  if (quizErr) throw ApiError.internal(`Failed to fetch quiz: ${quizErr.message}`);
+  if (!quiz) throw ApiError.notFound('Quiz not found');
 
-  // Check authorization
-  const course = quiz.course as any;
-  if (
-    (req as any).user.role !== USER_ROLES.ADMIN &&
-    course.lecturer.toString() !== (req as any).user._id.toString()
-  ) {
+  const { data: course, error: courseErr } = await db
+    .from('courses')
+    .select('lecturer_id')
+    .eq('id', quiz.course_id)
+    .maybeSingle();
+  if (courseErr) throw ApiError.internal(`Failed to fetch course: ${courseErr.message}`);
+  if (!course) throw ApiError.notFound('Course not found');
+
+  if (req.user?.role !== USER_ROLES.ADMIN && course.lecturer_id !== userId) {
     throw ApiError.forbidden('You are not authorized to view attempts for this quiz');
   }
 
-  const attempts = await QuizAttempt.find({ quiz: quiz._id, isCompleted: true })
-    .populate('student', 'firstName lastName email studentId')
-    .sort({ score: -1 });
+  const { data: attempts, error } = await db
+    .from('quiz_attempts')
+    .select('*')
+    .eq('quiz_id', quiz.id)
+    .eq('is_completed', true)
+    .order('submitted_at', { ascending: false });
+  if (error) throw ApiError.internal(`Failed to fetch attempts: ${error.message}`);
 
-  // Calculate statistics
+  const rows = (attempts || []) as QuizAttemptRow[];
   const stats = {
-    totalAttempts: attempts.length,
-    averageScore:
-      attempts.length > 0
-        ? attempts.reduce((sum: number, a: any) => sum + a.score, 0) / attempts.length
-        : 0,
-    highestScore: attempts.length > 0 ? Math.max(...attempts.map((a: any) => a.score)) : 0,
-    lowestScore: attempts.length > 0 ? Math.min(...attempts.map((a: any) => a.score)) : 0,
-    averagePercentage:
-      attempts.length > 0
-        ? attempts.reduce((sum: number, a: any) => sum + a.percentage, 0) / attempts.length
-        : 0,
+    totalAttempts: rows.length,
+    averageScore: rows.length > 0 ? rows.reduce((sum, a) => sum + (a.score || 0), 0) / rows.length : 0,
+    highestScore: rows.length > 0 ? Math.max(...rows.map((a) => a.score || 0)) : 0,
+    lowestScore: rows.length > 0 ? Math.min(...rows.map((a) => a.score || 0)) : 0,
+    averagePercentage: rows.length > 0 ? rows.reduce((sum, a) => sum + (a.percentage || 0), 0) / rows.length : 0,
   };
 
-  res.json(ApiResponse.success('Data retrieved successfully', { stats, attempts }));
+  res.json(ApiResponse.success('Data retrieved successfully', { stats, attempts: rows }));
 });
 
 /**
@@ -401,14 +529,21 @@ export const getQuizAttempts = asyncHandler(async (req: Request, res: Response) 
  * @access  Private (Student)
  */
 export const getMyQuizAttempt = asyncHandler(async (req: Request, res: Response) => {
-  const attempt = await QuizAttempt.findOne({
-    quiz: req.params.id,
-    student: (req as any).user._id,
-  }).populate('quiz', 'title totalMarks');
+  const db = supabaseAdmin();
+  const userId = req.user?.userId || req.user?._id?.toString();
+  const { id } = req.params;
 
-  if (!attempt) {
-    throw ApiError.notFound('You have not attempted this quiz');
-  }
+  if (!userId) throw ApiError.unauthorized('User not authenticated');
+
+  const { data: attempt, error } = await db
+    .from('quiz_attempts')
+    .select('*')
+    .eq('quiz_id', id)
+    .eq('student_id', userId)
+    .maybeSingle();
+  if (error) throw ApiError.internal(`Failed to fetch attempt: ${error.message}`);
+  if (!attempt) throw ApiError.notFound('You have not attempted this quiz');
 
   res.json(ApiResponse.success('Data retrieved successfully', attempt));
 });
+

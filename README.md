@@ -26,9 +26,9 @@ A production-ready, enterprise-grade backend API for a comprehensive University 
 - **Runtime**: Node.js 20 with TypeScript
 - **Framework**: Express.js
 - **Database**: MongoDB with Mongoose ODM
-- **Authentication**: JWT (Access + Refresh Tokens)
+- **Authentication**: JWT (Local) or Supabase Auth JWTs
 - **File Storage**: Cloudinary
-- **Email Service**: Nodemailer with Gmail SMTP
+- **Email Service**: Nodemailer with Gmail SMTP (optional when using Supabase Auth)
 - **2FA**: Speakeasy (TOTP) + Email OTP
 - **Real-time**: Socket.io (planned)
 - **Payment**: Mock/Test mode (Paystack-ready structure)
@@ -116,6 +116,13 @@ See `.env.example` for all required environment variables:
 NODE_ENV=development
 PORT=5000
 CLIENT_URL=http://localhost:3000
+
+# Auth
+# local: backend-managed JWT + Mongo passwords
+# supabase: Supabase manages email verification + password reset; backend verifies Supabase JWTs
+AUTH_STRATEGY=local
+SUPABASE_URL=https://<your-project-ref>.supabase.co
+SUPABASE_JWT_AUDIENCE=authenticated
 
 # Database
 MONGODB_URI=mongodb://localhost:27017/university_portal

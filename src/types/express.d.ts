@@ -8,6 +8,7 @@ declare global {
         userId: string;
         email: string;
         role: string;
+        claims?: Record<string, unknown>;
       };
     }
   }
@@ -19,6 +20,7 @@ export interface AuthRequest extends Request {
     userId: string;
     email: string;
     role: string;
+    claims?: Record<string, unknown>;
   };
 }
 

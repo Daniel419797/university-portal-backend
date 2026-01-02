@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "https://api.university.edu",
+      "url": "https://university-portal-backend-1.onrender.com",
       "description": "Production server"
     },
     {
@@ -4933,31 +4933,6 @@
         ],
         "summary": "Auto-generated for POST /hod/results/:id/approve",
         "operationId": "post-hod-results-id-approve",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "x-source": "hod.routes.ts"
-      }
-    },
-    "/hod/results/{id}/reject": {
-      "post": {
-        "tags": [
-          "Hod"
-        ],
-        "summary": "Auto-generated for POST /hod/results/:id/reject",
-        "operationId": "post-hod-results-id-reject",
         "parameters": [
           {
             "name": "id",

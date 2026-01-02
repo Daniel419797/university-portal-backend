@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import Notification from '../models/Notification.model';
+import { supabaseAdmin } from '../config/supabase';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiError } from '../utils/ApiError';
 import { ApiResponse } from '../utils/ApiResponse';
@@ -10,38 +10,41 @@ import { ApiResponse } from '../utils/ApiResponse';
  * @access  Private
  */
 export const getNotifications = asyncHandler(async (req: Request, res: Response) => {
+  const db = supabaseAdmin();
   const { page = 1, limit = 20, read } = req.query;
+  const userId = req.user?.userId || req.user?._id?.toString();
 
-  const query: Record<string, unknown> = {
-    user: (req as any).user._id,
-  };
-
-  // Filter by read status
-  if (read !== undefined) {
-    query.isRead = read === 'true';
-  }
+  if (!userId) throw ApiError.unauthorized('User not authenticated');
 
   const pageNum = parseInt(page as string);
   const limitNum = parseInt(limit as string);
   const skip = (pageNum - 1) * limitNum;
 
-  const [notifications, total, unreadCount] = await Promise.all([
-    Notification.find(query)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limitNum),
-    Notification.countDocuments(query),
-    Notification.countDocuments({ user: (req as any).user._id, isRead: false }),
+  let query = db
+    .from('notifications')
+    .select('*', { count: 'exact' })
+    .eq('user_id', userId);
+
+  // Filter by read status
+  if (read !== undefined) {
+    query = query.is('read_at', read === 'true' ? 'not.null' : 'null');
+  }
+
+  const [result, unreadResult] = await Promise.all([
+    query.order('created_at', { ascending: false }).range(skip, skip + limitNum - 1),
+    db.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('read_at', null),
   ]);
+
+  if (result.error) throw ApiError.internal(`Failed to fetch notifications: ${result.error.message}`);
 
   res.json(
     ApiResponse.success('Data retrieved successfully', {
-      notifications,
-      unreadCount,
+      notifications: result.data,
+      unreadCount: unreadResult.count || 0,
       pagination: {
-        total,
+        total: result.count || 0,
         page: pageNum,
-        pages: Math.ceil(total / limitNum),
+        pages: Math.ceil((result.count || 0) / limitNum),
         limit: limitNum,
       },
     })
@@ -54,22 +57,35 @@ export const getNotifications = asyncHandler(async (req: Request, res: Response)
  * @access  Private
  */
 export const getNotificationById = asyncHandler(async (req: Request, res: Response) => {
-  const notification = await Notification.findById(req.params.id);
+  const db = supabaseAdmin();
+  const userId = req.user?.userId || req.user?._id?.toString();
 
-  if (!notification) {
-    throw ApiError.notFound('Notification not found');
-  }
+  if (!userId) throw ApiError.unauthorized('User not authenticated');
+
+  const { data: notification, error } = await db
+    .from('notifications')
+    .select('*')
+    .eq('id', req.params.id)
+    .maybeSingle();
+
+  if (error) throw ApiError.internal(`Failed to fetch notification: ${error.message}`);
+  if (!notification) throw ApiError.notFound('Notification not found');
 
   // Users can only view their own notifications
-  if (notification.user.toString() !== (req as any).user._id.toString()) {
+  if (notification.user_id !== userId) {
     throw ApiError.forbidden('You are not authorized to view this notification');
   }
 
   // Mark as read when viewed
-  if (!notification.isRead) {
-    notification.isRead = true;
-    notification.readAt = new Date();
-    await notification.save();
+  if (!notification.read_at) {
+    const { error: updateError } = await db
+      .from('notifications')
+      .update({ read_at: new Date().toISOString() })
+      .eq('id', req.params.id);
+
+    if (!updateError) {
+      notification.read_at = new Date().toISOString();
+    }
   }
 
   res.json(ApiResponse.success('Data retrieved successfully', notification));
@@ -81,24 +97,35 @@ export const getNotificationById = asyncHandler(async (req: Request, res: Respon
  * @access  Private
  */
 export const markAsRead = asyncHandler(async (req: Request, res: Response) => {
-  const notification = await Notification.findById(req.params.id);
+  const db = supabaseAdmin();
+  const userId = req.user?.userId || req.user?._id?.toString();
 
-  if (!notification) {
-    throw ApiError.notFound('Notification not found');
-  }
+  if (!userId) throw ApiError.unauthorized('User not authenticated');
+
+  const { data: notification, error: fetchError } = await db
+    .from('notifications')
+    .select('user_id, read_at')
+    .eq('id', req.params.id)
+    .maybeSingle();
+
+  if (fetchError) throw ApiError.internal(`Failed to fetch notification: ${fetchError.message}`);
+  if (!notification) throw ApiError.notFound('Notification not found');
 
   // Users can only mark their own notifications
-  if (notification.user.toString() !== (req as any).user._id.toString()) {
+  if (notification.user_id !== userId) {
     throw ApiError.forbidden('You are not authorized to modify this notification');
   }
 
-  if (!notification.isRead) {
-    notification.isRead = true;
-    notification.readAt = new Date();
-    await notification.save();
-  }
+  const { data, error } = await db
+    .from('notifications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('id', req.params.id)
+    .select()
+    .single();
 
-  res.json(ApiResponse.success('Notification marked as read', notification));
+  if (error) throw ApiError.internal(`Failed to update notification: ${error.message}`);
+
+  res.json(ApiResponse.success('Notification marked as read', data));
 });
 
 /**
@@ -107,13 +134,28 @@ export const markAsRead = asyncHandler(async (req: Request, res: Response) => {
  * @access  Private
  */
 export const markAllAsRead = asyncHandler(async (req: Request, res: Response) => {
-  const result = await Notification.updateMany(
-    { user: (req as any).user._id, isRead: false },
-    { isRead: true, readAt: new Date() }
-  );
+  const db = supabaseAdmin();
+  const userId = req.user?.userId || req.user?._id?.toString();
+
+  if (!userId) throw ApiError.unauthorized('User not authenticated');
+
+  const { error } = await db
+    .from('notifications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .is('read_at', null);
+
+  if (error) throw ApiError.internal(`Failed to update notifications: ${error.message}`);
+
+  // Get count of affected rows
+  const { count } = await db
+    .from('notifications')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .not('read_at', 'is', null);
 
   res.json(
-    ApiResponse.success('All notifications marked as read', { modifiedCount: result.modifiedCount })
+    ApiResponse.success('All notifications marked as read', { modifiedCount: count || 0 })
   );
 });
 
@@ -123,18 +165,28 @@ export const markAllAsRead = asyncHandler(async (req: Request, res: Response) =>
  * @access  Private
  */
 export const deleteNotification = asyncHandler(async (req: Request, res: Response) => {
-  const notification = await Notification.findById(req.params.id);
+  const db = supabaseAdmin();
+  const userId = req.user?.userId || req.user?._id?.toString();
 
-  if (!notification) {
-    throw ApiError.notFound('Notification not found');
-  }
+  if (!userId) throw ApiError.unauthorized('User not authenticated');
+
+  const { data: notification, error: fetchError } = await db
+    .from('notifications')
+    .select('user_id')
+    .eq('id', req.params.id)
+    .maybeSingle();
+
+  if (fetchError) throw ApiError.internal(`Failed to fetch notification: ${fetchError.message}`);
+  if (!notification) throw ApiError.notFound('Notification not found');
 
   // Users can only delete their own notifications
-  if (notification.user.toString() !== (req as any).user._id.toString()) {
+  if (notification.user_id !== userId) {
     throw ApiError.forbidden('You are not authorized to delete this notification');
   }
 
-  await notification.deleteOne();
+  const { error } = await db.from('notifications').delete().eq('id', req.params.id);
+
+  if (error) throw ApiError.internal(`Failed to delete notification: ${error.message}`);
 
   res.json(ApiResponse.success('Notification deleted successfully', null));
 });
@@ -145,13 +197,28 @@ export const deleteNotification = asyncHandler(async (req: Request, res: Respons
  * @access  Private
  */
 export const clearReadNotifications = asyncHandler(async (req: Request, res: Response) => {
-  const result = await Notification.deleteMany({
-    user: (req as any).user._id,
-    isRead: true,
-  });
+  const db = supabaseAdmin();
+  const userId = req.user?.userId || req.user?._id?.toString();
+
+  if (!userId) throw ApiError.unauthorized('User not authenticated');
+
+  // Get count before deletion
+  const { count: deleteCount } = await db
+    .from('notifications')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .not('read_at', 'is', null);
+
+  const { error } = await db
+    .from('notifications')
+    .delete()
+    .eq('user_id', userId)
+    .not('read_at', 'is', null);
+
+  if (error) throw ApiError.internal(`Failed to delete notifications: ${error.message}`);
 
   res.json(
-    ApiResponse.success('Read notifications cleared', { deletedCount: result.deletedCount })
+    ApiResponse.success('Read notifications cleared', { deletedCount: deleteCount || 0 })
   );
 });
 
@@ -161,12 +228,20 @@ export const clearReadNotifications = asyncHandler(async (req: Request, res: Res
  * @access  Private
  */
 export const getUnreadCount = asyncHandler(async (req: Request, res: Response) => {
-  const count = await Notification.countDocuments({
-    user: (req as any).user._id,
-    isRead: false,
-  });
+  const db = supabaseAdmin();
+  const userId = req.user?.userId || req.user?._id?.toString();
 
-  res.json(ApiResponse.success('Data retrieved successfully', { count }));
+  if (!userId) throw ApiError.unauthorized('User not authenticated');
+
+  const { count, error } = await db
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .is('read_at', null);
+
+  if (error) throw ApiError.internal(`Failed to count notifications: ${error.message}`);
+
+  res.json(ApiResponse.success('Data retrieved successfully', { count: count || 0 }));
 });
 
 /**
@@ -175,21 +250,33 @@ export const getUnreadCount = asyncHandler(async (req: Request, res: Response) =
  * @access  Private
  */
 export const getRecentNotifications = asyncHandler(async (req: Request, res: Response) => {
-  const notifications = await Notification.find({
-    user: (req as any).user._id,
-  })
-    .sort({ createdAt: -1 })
-    .limit(10);
+  const db = supabaseAdmin();
+  const userId = req.user?.userId || req.user?._id?.toString();
 
-  const unreadCount = await Notification.countDocuments({
-    user: (req as any).user._id,
-    isRead: false,
-  });
+  if (!userId) throw ApiError.unauthorized('User not authenticated');
+
+  const [notificationsResult, unreadResult] = await Promise.all([
+    db
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(10),
+    db
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .is('read_at', null),
+  ]);
+
+  if (notificationsResult.error) {
+    throw ApiError.internal(`Failed to fetch notifications: ${notificationsResult.error.message}`);
+  }
 
   res.json(
     ApiResponse.success('Data retrieved successfully', {
-      notifications,
-      unreadCount,
+      notifications: notificationsResult.data,
+      unreadCount: unreadResult.count || 0,
     })
   );
 });

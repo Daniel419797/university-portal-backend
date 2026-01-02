@@ -3,8 +3,9 @@ import bcrypt from 'bcrypt';
 import { SALT_ROUNDS } from '../utils/constants';
 
 export interface IUser extends Document {
+  supabaseId?: string;
   email: string;
-  password: string;
+  password?: string;
   firstName: string;
   lastName: string;
   role: 'student' | 'lecturer' | 'admin' | 'hod' | 'bursary';
@@ -45,6 +46,12 @@ export interface IUser extends Document {
 
 const userSchema = new Schema<IUser>(
   {
+    supabaseId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
     email: {
       type: String,
       required: [true, 'Email is required'],
@@ -55,7 +62,10 @@ const userSchema = new Schema<IUser>(
     },
     password: {
       type: String,
-      required: [true, 'Password is required'],
+      required: function () {
+        // When using Supabase Auth, passwords are managed by Supabase.
+        return process.env.AUTH_STRATEGY !== 'supabase';
+      },
       minlength: 8,
       select: false,
     },
@@ -140,6 +150,7 @@ userSchema.index({ email: 1, deletedAt: 1 });
 
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
+  if (!this.password) return next();
   this.password = await bcrypt.hash(this.password, SALT_ROUNDS);
   next();
 });
@@ -147,6 +158,7 @@ userSchema.pre('save', async function (next) {
 userSchema.methods.comparePassword = async function (
   candidatePassword: string
 ): Promise<boolean> {
+  if (!this.password) return false;
   return bcrypt.compare(candidatePassword, this.password);
 };
 

@@ -14,7 +14,7 @@ import {
   getHodStudents,
   updateHodDepartmentProfile,
 } from '../../controllers/hod.controller';
-import { approveResultByHOD, rejectResultByHOD } from '../../controllers/result.controller';
+import { approveResultByHOD } from '../../controllers/result.controller';
 
 const router = Router();
 
@@ -31,7 +31,6 @@ router.get('/department/statistics', getHodDepartmentStatistics);
 router.get('/results/pending-approval', getHodPendingResults);
 router.get('/results/:id', getHodResultDetail);
 router.post('/results/:id/approve', approveResultByHOD);
-router.post('/results/:id/reject', rejectResultByHOD);
 router.get('/analytics', getHodAnalytics);
 
 export default router;

@@ -1,96 +1,132 @@
 import { Request, Response } from 'express';
+import { supabaseAdmin } from '../config/supabase';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse } from '../utils/ApiResponse';
-import User from '../models/User.model';
-import Course from '../models/Course.model';
-import Enrollment from '../models/Enrollment.model';
-import Assignment from '../models/Assignment.model';
-import Submission from '../models/Submission.model';
-import Quiz from '../models/Quiz.model';
-import Result from '../models/Result.model';
-import Payment from '../models/Payment.model';
-import Hostel from '../models/Hostel.model';
-import HostelApplication from '../models/HostelApplication.model';
-import Notification from '../models/Notification.model';
-import Clearance from '../models/Clearance.model';
+
+type CourseRow = { id: string; title: string; code: string; credits?: number; created_at?: string };
+type EnrollmentRow = { id: string; created_at?: string; student?: string; status?: string; course?: CourseRow };
+type AssignmentRow = { id: string; title: string; total_marks?: number; due_date?: string; course?: CourseRow; course_id?: string };
+type SubmissionRow = { id: string; assignment: string; student: string; grade?: number | null };
+type ResultRow = { id: string; grade_points?: number; course?: { id: string; credits?: number } };
+type ProfileRow = { id: string; first_name: string; last_name: string; email?: string; role?: string; department?: string; is_active?: boolean; created_at?: string };
+type PaymentRow = { id: string; amount: number; status: string; type?: string; created_at?: string; student?: ProfileRow };
+type QuizRow = { id: string; title?: string; course?: string };
+
+const getExactCount = async (
+  query: unknown
+): Promise<number> => {
+  const { count, error } = await (query as unknown as Promise<{ count: number | null; error: { message?: string } | null }>);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+};
+
+const getRows = async <T>(
+  query: unknown
+): Promise<T[]> => {
+  const { data, error } = await (query as unknown as Promise<{ data: T[] | null; error: { message?: string } | null }>);
+  if (error) throw new Error(error.message);
+  return data ?? [];
+};
 
 // @desc    Get Student Dashboard
 // @route   GET /api/v1/students/dashboard
 // @access  Private (Student)
 export const getStudentDashboard = asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).user.id;
+  const db = supabaseAdmin();
+  const userId = req.user?.userId;
+  if (!userId) throw new Error('Unauthorized');
 
-  // Get enrolled courses count
-  const enrolledCourses = await Enrollment.countDocuments({
-    student: userId,
-    status: 'active'
-  });
+  const enrolledCourses = await getExactCount(
+    db
+      .from('enrollments')
+      .select('id', { count: 'exact', head: true })
+      .eq('student', userId)
+      .eq('status', 'active')
+  );
 
-  // Get pending assignments
-  const activeEnrollments = await Enrollment.find({
-    student: userId,
-    status: 'active'
-  }).select('course');
+  const activeEnrollments = await getRows<EnrollmentRow>(
+    db
+      .from('enrollments')
+      .select('id, course:course(id,title,code,credits)')
+      .eq('student', userId)
+      .eq('status', 'active')
+  );
 
-  const courseIds = activeEnrollments.map(e => e.course);
+  const courseIds = Array.from(
+    new Set((activeEnrollments || []).map((e) => e.course?.id).filter((v): v is string => Boolean(v)))
+  );
 
-  const assignments = await Assignment.find({
-    course: { $in: courseIds },
-    dueDate: { $gte: new Date() }
-  });
+  const assignments = await getRows<AssignmentRow>(
+    db
+      .from('assignments')
+      .select('id,title,total_marks,due_date,course:course(id,title,code)')
+      .in('course', courseIds.length ? courseIds : ['__none__'])
+      .gte('due_date', new Date().toISOString())
+  );
 
-  const submittedAssignmentIds = await Submission.find({
-    student: userId,
-    assignment: { $in: assignments.map(a => a._id) }
-  }).distinct('assignment');
+  const submitted = await getRows<SubmissionRow>(
+    db
+      .from('submissions')
+      .select('assignment')
+      .eq('student', userId)
+      .in('assignment', assignments.length ? assignments.map(a => a.id) : ['__none__'])
+  );
+  const submittedAssignmentIds = Array.from(new Set(submitted.map((s) => s.assignment))).filter(Boolean);
 
-  const pendingAssignments = assignments.filter(
-    a => !submittedAssignmentIds.includes(a._id.toString() as any)
-  ).length;
+  const pendingAssignments = assignments.filter(a => !submittedAssignmentIds.includes(a.id)).length;
 
-  // Get CGPA
-  const results = await Result.find({
-    student: userId,
-    isPublished: true
-  }).populate('course', 'credits');
+  const results = await getRows<ResultRow>(
+    db
+      .from('results')
+      .select('id, grade_points, course:course(id,credits)')
+      .eq('student', userId)
+      .eq('is_published', true)
+  );
 
   let cgpa = 0;
   if (results.length > 0) {
-    const totalGradePoints = results.reduce((sum, r) => sum + (r.gradePoints || 0), 0);
-    const totalCredits = results.reduce((sum, r) => sum + (((r.course as any)?.credits) || 0), 0);
+    const totalGradePoints = results.reduce((sum, r) => sum + (r.grade_points || 0), 0);
+    const totalCredits = results.reduce((sum, r) => sum + (r.course?.credits || 0), 0);
     cgpa = totalCredits > 0 ? totalGradePoints / totalCredits : 0;
   }
 
-  // Get payment status
-  const latestPayment = await Payment.findOne({
-    student: userId,
-    status: 'verified'
-  }).sort({ createdAt: -1 });
+  const latestPaymentRows = await getRows(
+    db
+      .from('payments')
+      .select('id,status,created_at')
+      .eq('student', userId)
+      .eq('status', 'verified')
+      .order('created_at', { ascending: false })
+      .limit(1)
+  );
+  const paymentStatus = latestPaymentRows.length > 0 ? 'Verified' : 'Pending';
 
-  const paymentStatus = latestPayment ? 'Verified' : 'Pending';
+  const recentCourses = await getRows<EnrollmentRow>(
+    db
+      .from('enrollments')
+      .select('course:course(id,title,code,credits)')
+      .eq('student', userId)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(5)
+  );
 
-  // Get recent courses
-  const recentCourses = await Enrollment.find({
-    student: userId,
-    status: 'active'
-  })
-    .populate('course', 'title code credits')
-    .limit(5)
-    .sort({ createdAt: -1 });
+  const recentAssignments = await getRows<AssignmentRow>(
+    db
+      .from('assignments')
+      .select('id,title,total_marks,due_date,course:course(id,title,code)')
+      .in('course', courseIds.length ? courseIds : ['__none__'])
+      .order('created_at', { ascending: false })
+      .limit(5)
+  );
 
-  // Get recent assignments
-  const recentAssignments = await Assignment.find({
-    course: { $in: courseIds }
-  })
-    .populate('course', 'title code')
-    .limit(5)
-    .sort({ createdAt: -1 });
-
-  // Get unread notifications count
-  const unreadNotifications = await Notification.countDocuments({
-    user: userId,
-    isRead: false
-  });
+  const unreadNotifications = await getExactCount(
+    db
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('user', userId)
+      .eq('is_read', false)
+  );
 
   res.json(
     ApiResponse.success('Dashboard data fetched successfully', {
@@ -98,21 +134,21 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
       pendingAssignments,
       cgpa: parseFloat(cgpa.toFixed(2)),
       paymentStatus,
-      recentCourses: recentCourses.map(e => ({
-        id: (e.course as any)._id,
-        title: (e.course as any).title,
-        code: (e.course as any).code,
-        credits: (e.course as any).credits
+      recentCourses: recentCourses.map((e) => ({
+        id: e.course?.id,
+        title: e.course?.title,
+        code: e.course?.code,
+        credits: e.course?.credits
       })),
-      recentAssignments: recentAssignments.map(a => ({
-        id: a._id,
+      recentAssignments: recentAssignments.map((a) => ({
+        id: a.id,
         title: a.title,
         course: {
-          title: (a.course as any).title,
-          code: (a.course as any).code
+          title: a.course?.title,
+          code: a.course?.code
         },
-        deadline: a.dueDate,
-        totalMarks: a.totalMarks
+        deadline: a.due_date,
+        totalMarks: a.total_marks
       })),
       unreadNotifications
     })
@@ -123,53 +159,71 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
 // @route   GET /api/v1/lecturers/dashboard
 // @access  Private (Lecturer)
 export const getLecturerDashboard = asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).user.id;
+  const db = supabaseAdmin();
+  const userId = req.user?.userId;
+  if (!userId) throw new Error('Unauthorized');
 
-  // Get assigned courses
-   const assignedCourses = await Course.countDocuments({
-     lecturer: userId
-   });
+  const assignedCourses = await getExactCount(
+    db.from('courses').select('id', { count: 'exact', head: true }).eq('lecturer', userId)
+  );
 
-  // Get total students across all courses
-   const courses = await Course.find({ lecturer: userId }).select('_id');
-  const courseIds = courses.map(c => c._id);
+  const courses = await getRows<CourseRow>(
+    db.from('courses').select('id,title,code').eq('lecturer', userId)
+  );
+  const courseIds = (courses || []).map((c) => c.id);
 
-  const totalStudents = await Enrollment.countDocuments({
-    course: { $in: courseIds },
-    status: 'active'
-  });
+  const totalStudents = await getExactCount(
+    db
+      .from('enrollments')
+      .select('id', { count: 'exact', head: true })
+      .in('course', courseIds.length ? courseIds : ['__none__'])
+      .eq('status', 'active')
+  );
 
-  // Get pending submissions
-   const assignments = await Assignment.find({
-     course: { $in: courseIds }
-   }).select('_id');
+  const assignments = await getRows<AssignmentRow>(
+    db
+      .from('assignments')
+      .select('id, title, course')
+      .in('course', courseIds.length ? courseIds : ['__none__'])
+  );
 
-  const assignmentIds = assignments.map(a => a._id);
+  const assignmentIds = assignments.map((a) => a.id);
 
-   const pendingSubmissions = await Submission.countDocuments({
-     assignment: { $in: assignmentIds },
-     grade: { $exists: false }
-   });
+  const pendingSubmissions = await getExactCount(
+    db
+      .from('submissions')
+      .select('id', { count: 'exact', head: true })
+      .in('assignment', assignmentIds.length ? assignmentIds : ['__none__'])
+      .is('grade', null)
+  );
 
-  // Get pending quiz grading
-  const quizzes = await Quiz.find({
-    course: { $in: courseIds }
-  }).select('_id');
+  const quizzes = await getRows<QuizRow>(
+    db
+      .from('quizzes')
+      .select('id, title, course')
+      .in('course', courseIds.length ? courseIds : ['__none__'])
+  );
 
-  // Get recent courses with student count
-   const recentCourses = await Course.find({ lecturer: userId })
-    .limit(5)
-    .sort({ createdAt: -1 })
-    .lean();
+  const recentCourses = await getRows<CourseRow>(
+    db
+      .from('courses')
+      .select('id,title,code,created_at')
+      .eq('lecturer', userId)
+      .order('created_at', { ascending: false })
+      .limit(5)
+  );
 
   const recentCoursesWithStats = await Promise.all(
     recentCourses.map(async (course) => {
-      const studentCount = await Enrollment.countDocuments({
-        course: course._id,
-        status: 'active'
-      });
+      const studentCount = await getExactCount(
+        db
+          .from('enrollments')
+          .select('id', { count: 'exact', head: true })
+          .eq('course', course.id)
+          .eq('status', 'active')
+      );
       return {
-        id: course._id,
+        id: course.id,
         title: course.title,
         code: course.code,
         studentCount
@@ -177,19 +231,22 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
     })
   );
 
-  // Get recent assignments
-  const recentAssignments = await Assignment.find({
-    course: { $in: courseIds }
-  })
-    .populate('course', 'title code')
-    .limit(5)
-    .sort({ createdAt: -1 });
+  const recentAssignments = await getRows<AssignmentRow>(
+    db
+      .from('assignments')
+      .select('id,title,total_marks,due_date,course:course(id,title,code)')
+      .in('course', courseIds.length ? courseIds : ['__none__'])
+      .order('created_at', { ascending: false })
+      .limit(5)
+  );
 
-  // Get unread notifications
-   const unreadNotifications = await Notification.countDocuments({
-     user: userId,
-     isRead: false
-   });
+  const unreadNotifications = await getExactCount(
+    db
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('user', userId)
+      .eq('is_read', false)
+  );
 
   res.json(
     ApiResponse.success('Dashboard data fetched successfully', {
@@ -198,15 +255,15 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
       pendingSubmissions,
       pendingQuizzes: quizzes.length,
       recentCourses: recentCoursesWithStats,
-      recentAssignments: recentAssignments.map(a => ({
-        id: a._id,
+      recentAssignments: recentAssignments.map((a) => ({
+        id: a.id,
         title: a.title,
         course: {
-          title: (a.course as any).title,
-          code: (a.course as any).code
+          title: a.course?.title,
+          code: a.course?.code
         },
-        deadline: a.dueDate,
-        totalMarks: a.totalMarks
+        deadline: a.due_date,
+        totalMarks: a.total_marks
       })),
       unreadNotifications
     })
@@ -217,62 +274,68 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
 // @route   GET /api/v1/hod/dashboard
 // @access  Private (HOD)
 export const getHODDashboard = asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).user.id;
-  const user = await User.findById(userId);
+  const db = supabaseAdmin();
+  const userId = req.user?.userId;
+  if (!userId) throw new Error('Unauthorized');
+  const userRows = await getRows<ProfileRow>(db.from('profiles').select('id,department').eq('id', userId).limit(1));
+  const user = userRows[0];
 
   if (!user || !user.department) {
     res.status(400);
     throw new Error('Department not found for user');
   }
 
-  // Get department statistics
-  const totalStudents = await User.countDocuments({
-    role: 'student',
-    department: user.department
-  });
+  const totalStudents = await getExactCount(
+    db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('department', user.department)
+  );
 
-  const totalStaff = await User.countDocuments({
-    role: 'lecturer',
-    department: user.department
-  });
+  const totalStaff = await getExactCount(
+    db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'lecturer').eq('department', user.department)
+  );
 
-  const totalCourses = await Course.countDocuments({
-    department: user.department
-  });
+  const totalCourses = await getExactCount(
+    db.from('courses').select('id', { count: 'exact', head: true }).eq('department', user.department)
+  );
 
-  const activeLecturers = await User.countDocuments({
-    role: 'lecturer',
-    department: user.department,
-    isActive: true
-  });
+  const activeLecturers = await getExactCount(
+    db
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('role', 'lecturer')
+      .eq('department', user.department)
+      .eq('is_active', true)
+  );
 
-  // Get pending approvals
-  const pendingResults = await Result.countDocuments({
-    approvedByHOD: false,
-    isPublished: false
-  });
+  const pendingResults = await getExactCount(
+    db
+      .from('results')
+      .select('id', { count: 'exact', head: true })
+      .eq('approved_by_hod', false)
+      .eq('is_published', false)
+  );
 
-  const pendingClearances = await Clearance.countDocuments({
-    overallStatus: 'in-progress'
-  });
+  const pendingClearances = await getExactCount(
+    db.from('clearance').select('id', { count: 'exact', head: true }).eq('overall_status', 'in-progress')
+  );
 
-  // Get recent activities (course registrations, etc.)
-  const departmentCourseIds = await Course.find({ department: user.department }).distinct('_id');
+  const departmentCourses = await getRows<CourseRow>(
+    db.from('courses').select('id').eq('department', user.department)
+  );
+  const departmentCourseIds = departmentCourses.map((c) => c.id);
 
-  const recentEnrollments = await Enrollment.find({
-    status: 'active',
-    course: { $in: departmentCourseIds }
-  })
-    .populate('student', 'firstName lastName')
-    .populate('course', 'title code')
-    .limit(10)
-    .sort({ createdAt: -1 });
+  const recentEnrollments = await getRows<EnrollmentRow & { student?: ProfileRow; course?: CourseRow }>(
+    db
+      .from('enrollments')
+      .select('id, created_at, student:profiles(id,first_name,last_name), course:courses(id,code,title)')
+      .in('course', departmentCourseIds.length ? departmentCourseIds : ['__none__'])
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(10)
+  );
 
-  // Get unread notifications
-  const unreadNotifications = await Notification.countDocuments({
-    user: userId,
-    isRead: false
-  });
+  const unreadNotifications = await getExactCount(
+    db.from('notifications').select('id', { count: 'exact', head: true }).eq('user', userId).eq('is_read', false)
+  );
 
   res.json(
     ApiResponse.success('Dashboard data fetched successfully', {
@@ -287,12 +350,12 @@ export const getHODDashboard = asyncHandler(async (req: Request, res: Response) 
         clearances: pendingClearances,
         courseRegistrations: 0
       },
-      recentActivities: recentEnrollments.map(e => ({
-        id: e._id,
+      recentActivities: recentEnrollments.map((e) => ({
+        id: e.id,
         type: 'enrollment',
-        student: (e.student as any).firstName + ' ' + (e.student as any).lastName,
-        course: (e.course as any).code + ' - ' + (e.course as any).title,
-        date: e.createdAt
+        student: e.student?.first_name + ' ' + e.student?.last_name,
+        course: e.course?.code + ' - ' + e.course?.title,
+        date: e.created_at
       })),
       unreadNotifications
     })
@@ -303,57 +366,40 @@ export const getHODDashboard = asyncHandler(async (req: Request, res: Response) 
 // @route   GET /api/v1/bursary/dashboard
 // @access  Private (Bursary)
 export const getBursaryDashboard = asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).user.id;
+  const db = supabaseAdmin();
+  const userId = req.user?.userId;
+  if (!userId) throw new Error('Unauthorized');
 
-  // Get payment statistics
-  const totalPayments = await Payment.countDocuments({});
+  const totalPayments = await getExactCount(db.from('payments').select('id', { count: 'exact', head: true }));
 
-  const verifiedPayments = await Payment.countDocuments({
-    status: 'verified'
-  });
+  const verifiedPayments = await getExactCount(db.from('payments').select('id', { count: 'exact', head: true }).eq('status', 'verified'));
 
-  const pendingPayments = await Payment.countDocuments({
-    status: 'pending'
-  });
+  const pendingPayments = await getExactCount(db.from('payments').select('id', { count: 'exact', head: true }).eq('status', 'pending'));
 
-  const failedPayments = await Payment.countDocuments({
-    status: 'failed'
-  });
+  const failedPayments = await getExactCount(db.from('payments').select('id', { count: 'exact', head: true }).eq('status', 'failed'));
 
-  // Get revenue statistics
-  const revenueAggregation = await Payment.aggregate([
-    { $match: { status: 'verified' } },
-    {
-      $group: {
-        _id: null,
-        paidAmount: { $sum: '$amount' }
-      }
-    }
-  ]);
+  const verifiedRows = await getRows<{ amount: number }>(db.from('payments').select('amount').eq('status', 'verified'));
+  const paidAmount = verifiedRows.reduce((sum: number, p) => sum + (Number(p.amount) || 0), 0);
 
-  const paidAmount = revenueAggregation.length > 0 ? revenueAggregation[0].paidAmount : 0;
-
-  // Calculate expected total (all students should pay)
-  const totalStudents = await User.countDocuments({ role: 'student' });
+  const totalStudents = await getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student'));
   const expectedRevenue = totalStudents * 150000; // Assuming 150,000 per student
   const pendingAmount = expectedRevenue - paidAmount;
 
-  // Get recent payments
-  const recentPayments = await Payment.find({})
-    .populate('student', 'firstName lastName email')
-    .populate('session', 'name')
-    .limit(10)
-    .sort({ createdAt: -1 });
+  const recentPayments = await getRows<PaymentRow>(
+    db
+      .from('payments')
+      .select('id,amount,status,type,created_at, student:profiles(id,first_name,last_name,email)')
+      .order('created_at', { ascending: false })
+      .limit(10)
+  );
 
   // Get scholarship statistics (placeholder for now)
   const totalScholarships = 0;
   const pendingScholarships = 0;
 
-  // Get unread notifications
-  const unreadNotifications = await Notification.countDocuments({
-    user: userId,
-    isRead: false
-  });
+  const unreadNotifications = await getExactCount(
+    db.from('notifications').select('id', { count: 'exact', head: true }).eq('user', userId).eq('is_read', false)
+  );
 
   res.json(
     ApiResponse.success('Dashboard data fetched successfully', {
@@ -372,16 +418,16 @@ export const getBursaryDashboard = asyncHandler(async (req: Request, res: Respon
         total: totalScholarships,
         pending: pendingScholarships
       },
-      recentPayments: recentPayments.map(p => ({
-        id: p._id,
+      recentPayments: recentPayments.map((p) => ({
+        id: p.id,
         student: {
-          name: (p.student as any).firstName + ' ' + (p.student as any).lastName,
-          email: (p.student as any).email
+          name: p.student?.first_name + ' ' + p.student?.last_name,
+          email: p.student?.email
         },
         amount: p.amount,
         status: p.status,
         paymentType: p.type,
-        date: p.createdAt
+        date: p.created_at
       })),
       unreadNotifications
     })
@@ -392,63 +438,68 @@ export const getBursaryDashboard = asyncHandler(async (req: Request, res: Respon
 // @route   GET /api/v1/admin/dashboard
 // @access  Private (Admin)
 export const getAdminDashboard = asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).user.id;
+  const db = supabaseAdmin();
+  const userId = req.user?.userId;
+  if (!userId) throw new Error('Unauthorized');
 
   // Get user statistics
-  const totalUsers = await User.countDocuments({});
-  const totalStudents = await User.countDocuments({ role: 'student' });
-  const totalLecturers = await User.countDocuments({ role: 'lecturer' });
-  const totalAdmins = await User.countDocuments({ role: 'admin' });
-  const activeUsers = await User.countDocuments({ isActive: true });
+  const totalUsers = await getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }));
+  const totalStudents = await getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student'));
+  const totalLecturers = await getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'lecturer'));
+  const totalAdmins = await getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'admin'));
+  const activeUsers = await getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }).eq('is_active', true));
 
   // Get course statistics
-  const totalCourses = await Course.countDocuments({});
-  const activeCourses = await Course.countDocuments({ isActive: true });
+  const totalCourses = await getExactCount(db.from('courses').select('id', { count: 'exact', head: true }));
+  const activeCourses = await getExactCount(db.from('courses').select('id', { count: 'exact', head: true }).eq('is_active', true));
 
   // Get enrollment statistics
-  const totalEnrollments = await Enrollment.countDocuments({});
-  const activeEnrollments = await Enrollment.countDocuments({ status: 'active' });
+  const totalEnrollments = await getExactCount(db.from('enrollments').select('id', { count: 'exact', head: true }));
+  const activeEnrollments = await getExactCount(db.from('enrollments').select('id', { count: 'exact', head: true }).eq('status', 'active'));
 
   // Get payment statistics
-  const paymentStats = await Payment.aggregate([
-    {
-      $group: {
-        _id: '$status',
-        count: { $sum: 1 },
-        totalAmount: { $sum: '$amount' }
-      }
-    }
-  ]);
-
-  const verifiedPaymentStat = paymentStats.find(p => p._id === 'verified') || { count: 0, totalAmount: 0 };
-  const pendingPaymentStat = paymentStats.find(p => p._id === 'pending') || { count: 0, totalAmount: 0 };
+  const paymentRows = await getRows<PaymentRow>(db.from('payments').select('status,amount'));
+  const paymentStatsMap: Record<string, { count: number; totalAmount: number }> = {};
+  for (const p of paymentRows) {
+    const key = p.status ?? 'unknown';
+    if (!paymentStatsMap[key]) paymentStatsMap[key] = { count: 0, totalAmount: 0 };
+    paymentStatsMap[key].count += 1;
+    paymentStatsMap[key].totalAmount += Number(p.amount) || 0;
+  }
+  const verifiedPaymentStat = paymentStatsMap['verified'] || { count: 0, totalAmount: 0 };
+  const pendingPaymentStat = paymentStatsMap['pending'] || { count: 0, totalAmount: 0 };
 
   // Get hostel statistics
-  const totalHostels = await Hostel.countDocuments({});
-  const totalHostelApplications = await HostelApplication.countDocuments({});
-  const approvedApplications = await HostelApplication.countDocuments({ status: 'approved' });
+  const totalHostels = await getExactCount(db.from('hostels').select('id', { count: 'exact', head: true }));
+  const totalHostelApplications = await getExactCount(db.from('hostel_applications').select('id', { count: 'exact', head: true }));
+  const approvedApplications = await getExactCount(db.from('hostel_applications').select('id', { count: 'exact', head: true }).eq('status', 'approved'));
 
   // Get assignment and quiz statistics
-  const totalAssignments = await Assignment.countDocuments({});
-  const totalQuizzes = await Quiz.countDocuments({});
-  const totalSubmissions = await Submission.countDocuments({});
+  const totalAssignments = await getExactCount(db.from('assignments').select('id', { count: 'exact', head: true }));
+  const totalQuizzes = await getExactCount(db.from('quizzes').select('id', { count: 'exact', head: true }));
+  const totalSubmissions = await getExactCount(db.from('submissions').select('id', { count: 'exact', head: true }));
 
   // Get recent activities
-  const recentUsers = await User.find({})
-    .select('firstName lastName email role createdAt')
-    .limit(5)
-    .sort({ createdAt: -1 });
+  const recentUsers = await getRows<ProfileRow>(
+    db
+      .from('profiles')
+      .select('id,first_name,last_name,email,role,created_at')
+      .order('created_at', { ascending: false })
+      .limit(5)
+  );
 
-  const recentPayments = await Payment.find({})
-    .populate('student', 'firstName lastName')
-    .limit(5)
-    .sort({ createdAt: -1 });
+  const recentPayments = await getRows<PaymentRow>(
+    db
+      .from('payments')
+      .select('id,amount,status,created_at, student:profiles(id,first_name,last_name)')
+      .order('created_at', { ascending: false })
+      .limit(5)
+  );
 
   // Get unread notifications
-  const unreadNotifications = await Notification.countDocuments({
-    user: userId,
-    isRead: false
-  });
+  const unreadNotifications = await getExactCount(
+    db.from('notifications').select('id', { count: 'exact', head: true }).eq('user', userId).eq('is_read', false)
+  );
 
   res.json(
     ApiResponse.success('Dashboard data fetched successfully', {
@@ -487,21 +538,22 @@ export const getAdminDashboard = asyncHandler(async (req: Request, res: Response
         quizzes: totalQuizzes,
         submissions: totalSubmissions
       },
-      recentUsers: recentUsers.map(u => ({
-        id: u._id,
-        name: u.firstName + ' ' + u.lastName,
+      recentUsers: recentUsers.map((u) => ({
+        id: u.id,
+        name: u.first_name + ' ' + u.last_name,
         email: u.email,
         role: u.role,
-        createdAt: u.createdAt
+        created_at: u.created_at
       })),
-      recentPayments: recentPayments.map(p => ({
-        id: p._id,
-        student: (p.student as any)?.firstName + ' ' + (p.student as any)?.lastName,
+      recentPayments: recentPayments.map((p) => ({
+        id: p.id,
+        student: p.student?.first_name + ' ' + p.student?.last_name,
         amount: p.amount,
         status: p.status,
-        createdAt: p.createdAt
+        created_at: p.created_at
       })),
       unreadNotifications
     })
   );
 });
+

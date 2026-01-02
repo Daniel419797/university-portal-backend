@@ -1,4 +1,4 @@
-import Notification from '../models/Notification.model';
+import { supabaseAdmin } from '../config/supabase';
 import { NotificationType } from '../types';
 import logger from '../config/logger';
 
@@ -11,12 +11,13 @@ export class NotificationService {
     link?: string
   ): Promise<void> {
     try {
-      await Notification.create({
-        user: userId,
+      const db = supabaseAdmin();
+      await db.from('notifications').insert({
+        user_id: userId,
         type,
         title,
         message,
-        link,
+        data: link ? { link } : null,
       });
 
       logger.info(`Notification created for user ${userId}: ${title}`);
@@ -35,15 +36,16 @@ export class NotificationService {
     link?: string
   ): Promise<void> {
     try {
+      const db = supabaseAdmin();
       const notifications = userIds.map((userId) => ({
-        user: userId,
+        user_id: userId,
         type,
         title,
         message,
-        link,
+        data: link ? { link } : null,
       }));
 
-      await Notification.insertMany(notifications);
+      await db.from('notifications').insert(notifications);
 
       logger.info(`Bulk notifications created for ${userIds.length} users`);
 

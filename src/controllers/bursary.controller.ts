@@ -1,7 +1,5 @@
 import { Request, Response } from 'express';
-import mongoose from 'mongoose';
-import Payment from '../models/Payment.model';
-import Scholarship from '../models/Scholarship.model';
+import { supabaseAdmin } from '../config/supabase';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse } from '../utils/ApiResponse';
 import { ApiError } from '../utils/ApiError';
@@ -9,6 +7,8 @@ import { PAYMENT_STATUS, PAYMENT_TYPES } from '../utils/constants';
 
 const PAYMENT_STATUS_VALUES = Object.values(PAYMENT_STATUS);
 const PAYMENT_TYPE_VALUES = Object.values(PAYMENT_TYPES);
+const PAYMENT_STATUS_SET = new Set<string>(PAYMENT_STATUS_VALUES as unknown as string[]);
+const PAYMENT_TYPE_SET = new Set<string>(PAYMENT_TYPE_VALUES as unknown as string[]);
 
 type MaybeString = string | undefined;
 
@@ -23,15 +23,15 @@ type PaymentFilterParams = {
 interface ReportRow {
   reference: string;
   studentName: string;
-  studentId: string;
+  student_id: string;
   email: string;
   type: string;
   status: string;
   amount: number;
   session: string;
-  semester: string;
-  paymentDate: Date | null;
-  recordedAt: Date;
+  semester: string | null;
+  paymentDate: string | null;
+  recordedAt: string;
 }
 
 interface ReportSummary {
@@ -81,63 +81,69 @@ const parseDateInput = (value: unknown): Date | undefined => {
 };
 
 const buildPaymentFilter = ({ sessionId, statuses, types, startDate, endDate }: PaymentFilterParams) => {
-  const filter: Record<string, any> = {};
+  const uniqueStatuses = statuses ? [...new Set(statuses)] : undefined;
+  const uniqueTypes = types ? [...new Set(types)] : undefined;
 
-  if (sessionId) {
-    if (!mongoose.Types.ObjectId.isValid(sessionId)) {
-      throw ApiError.badRequest('Invalid session identifier');
-    }
-    filter.session = new mongoose.Types.ObjectId(sessionId);
-  }
-
-  if (statuses && statuses.length) {
-    const uniqueStatuses = [...new Set(statuses)];
+  if (uniqueStatuses) {
     uniqueStatuses.forEach((status) => {
-      if (!PAYMENT_STATUS_VALUES.includes(status as any)) {
+      if (!PAYMENT_STATUS_SET.has(status)) {
         throw ApiError.badRequest(`Unsupported payment status: ${status}`);
       }
     });
-    filter.status = uniqueStatuses.length === 1 ? uniqueStatuses[0] : { $in: uniqueStatuses };
   }
 
-  if (types && types.length) {
-    const uniqueTypes = [...new Set(types)];
+  if (uniqueTypes) {
     uniqueTypes.forEach((type) => {
-      if (!PAYMENT_TYPE_VALUES.includes(type as any)) {
+      if (!PAYMENT_TYPE_SET.has(type)) {
         throw ApiError.badRequest(`Unsupported payment type: ${type}`);
       }
     });
-    filter.type = uniqueTypes.length === 1 ? uniqueTypes[0] : { $in: uniqueTypes };
   }
 
-  if (startDate || endDate) {
-    const range: Record<string, Date> = {};
-    if (startDate) {
-      range.$gte = startDate;
-    }
-    if (endDate) {
-      range.$lte = endDate;
-    }
-    if (range.$gte && range.$lte && range.$gte > range.$lte) {
-      throw ApiError.badRequest('startDate cannot be after endDate');
-    }
-    filter.createdAt = range;
+  if (startDate && endDate && startDate > endDate) {
+    throw ApiError.badRequest('startDate cannot be after endDate');
   }
 
-  return filter;
+  return { sessionId, statuses: uniqueStatuses, types: uniqueTypes, startDate, endDate } as PaymentFilterParams;
 };
 
-const withMatchStage = (filter: Record<string, any>, ...stages: any[]) => {
-  if (Object.keys(filter).length === 0) {
-    return stages;
-  }
-  return [{ $match: filter }, ...stages];
+type PaymentRow = {
+  id: string;
+  reference: string;
+  amount: number;
+  status: string;
+  type: string;
+  created_at: string;
+  payment_date: string | null;
+  student?: { id: string; first_name: string; last_name: string; email: string; student_id: string } | Array<{ id: string; first_name: string; last_name: string; email: string; student_id: string }>;
+  session?: string;
+  semester?: string;
 };
 
-const mapBreakdown = (docs: Array<{ _id: string; count: number; amount: number }>) =>
-  docs.map((doc) => ({ key: doc._id, count: doc.count, amount: doc.amount }));
+type ScholarshipRow = {
+  id: string;
+  name: string;
+  amount: number;
+  status: string;
+  academic_year: string;
+  application_deadline: string | null;
+  filled_slots: number;
+  available_slots: number;
+};
+
+const mapBreakdown = (items: PaymentRow[], key: 'status' | 'type') => {
+  const acc: Record<string, { count: number; amount: number }> = {};
+  for (const p of items) {
+    const k = p[key];
+    acc[k] = acc[k] || { count: 0, amount: 0 };
+    acc[k].count += 1;
+    acc[k].amount += Number(p.amount || 0);
+  }
+  return Object.entries(acc).map(([k, v]) => ({ key: k, count: v.count, amount: v.amount }));
+};
 
 export const getBursaryReports = asyncHandler(async (req: Request, res: Response) => {
+  const db = supabaseAdmin();
   const sessionId = normalizeSingleValue(req.query.session);
   const status = normalizeSingleValue(req.query.status);
   const type = normalizeSingleValue(req.query.type);
@@ -154,118 +160,87 @@ export const getBursaryReports = asyncHandler(async (req: Request, res: Response
     endDate,
   });
 
-  const scholarshipFilter: Record<string, any> = {};
-  if (academicYear) {
-    scholarshipFilter.academicYear = academicYear;
-  }
-  if (scholarshipStatus) {
-    scholarshipFilter.status = scholarshipStatus;
-  }
+  let paymentsQuery = db
+    .from('payments')
+    .select(
+      'id, reference, amount, status, type, created_at, payment_date, student:profiles(id,first_name,last_name,email,student_id), session, semester'
+    )
+    .order('created_at', { ascending: false });
+  if (paymentFilter.sessionId) paymentsQuery = paymentsQuery.eq('session', paymentFilter.sessionId);
+  if (paymentFilter.statuses && paymentFilter.statuses.length === 1) paymentsQuery = paymentsQuery.eq('status', paymentFilter.statuses[0]);
+  if (paymentFilter.statuses && paymentFilter.statuses.length > 1) paymentsQuery = paymentsQuery.in('status', paymentFilter.statuses);
+  if (paymentFilter.types && paymentFilter.types.length === 1) paymentsQuery = paymentsQuery.eq('type', paymentFilter.types[0]);
+  if (paymentFilter.types && paymentFilter.types.length > 1) paymentsQuery = paymentsQuery.in('type', paymentFilter.types);
+  if (paymentFilter.startDate) paymentsQuery = paymentsQuery.gte('created_at', paymentFilter.startDate.toISOString());
+  if (paymentFilter.endDate) paymentsQuery = paymentsQuery.lte('created_at', paymentFilter.endDate.toISOString());
 
-  const [statusBreakdown, typeBreakdown, totalsAggregation, recentPayments, scholarshipBreakdown, scholarshipTimeline, scholarshipTotals, recentScholarships] =
-    await Promise.all([
-      Payment.aggregate(
-        withMatchStage(paymentFilter, {
-          $group: {
-            _id: '$status',
-            count: { $sum: 1 },
-            amount: { $sum: '$amount' },
-          },
-        })
-      ),
-      Payment.aggregate(
-        withMatchStage(paymentFilter, {
-          $group: {
-            _id: '$type',
-            count: { $sum: 1 },
-            amount: { $sum: '$amount' },
-          },
-        })
-      ),
-      Payment.aggregate(
-        withMatchStage(paymentFilter, {
-          $group: {
-            _id: null,
-            totalCount: { $sum: 1 },
-            totalAmount: { $sum: '$amount' },
-            verifiedAmount: {
-              $sum: {
-                $cond: [{ $eq: ['$status', PAYMENT_STATUS.VERIFIED] }, '$amount', 0],
-              },
-            },
-            pendingAmount: {
-              $sum: {
-                $cond: [{ $eq: ['$status', PAYMENT_STATUS.PENDING] }, '$amount', 0],
-              },
-            },
-            rejectedAmount: {
-              $sum: {
-                $cond: [{ $eq: ['$status', PAYMENT_STATUS.REJECTED] }, '$amount', 0],
-              },
-            },
-            processingAmount: {
-              $sum: {
-                $cond: [{ $eq: ['$status', PAYMENT_STATUS.PROCESSING] }, '$amount', 0],
-              },
-            },
-          },
-        })
-      ),
-      Payment.find(paymentFilter)
-        .populate('student', 'firstName lastName email studentId')
-        .populate('session', 'name')
-        .sort({ createdAt: -1 })
-        .limit(15),
-      Scholarship.aggregate(
-        withMatchStage(scholarshipFilter, {
-          $group: {
-            _id: '$status',
-            count: { $sum: 1 },
-            amount: { $sum: '$amount' },
-            beneficiaries: { $sum: '$filledSlots' },
-          },
-        })
-      ),
-      Scholarship.aggregate(
-        withMatchStage(
-          scholarshipFilter,
-          { $group: { _id: '$academicYear', totalAmount: { $sum: '$amount' }, scholarships: { $sum: 1 }, beneficiaries: { $sum: '$filledSlots' } } },
-          { $sort: { _id: -1 } },
-          { $limit: 5 }
-        )
-      ),
-      Scholarship.aggregate(
-        withMatchStage(scholarshipFilter, {
-          $group: {
-            _id: null,
-            totalAmount: { $sum: '$amount' },
-            totalScholarships: { $sum: 1 },
-            totalBeneficiaries: { $sum: '$filledSlots' },
-            availableSlots: { $sum: '$availableSlots' },
-          },
-        })
-      ),
-      Scholarship.find(scholarshipFilter)
-        .select('name amount status academicYear applicationDeadline filledSlots availableSlots')
-        .sort({ createdAt: -1 })
-        .limit(5),
-    ]);
+  const { data: recentPayments, error: paymentsErr } = await paymentsQuery.limit(15);
+  if (paymentsErr) throw ApiError.internal(`Failed to fetch payments: ${paymentsErr.message}`);
 
-  const totals = totalsAggregation[0] ?? {
-    totalAmount: 0,
-    totalCount: 0,
-    verifiedAmount: 0,
-    pendingAmount: 0,
-    rejectedAmount: 0,
-    processingAmount: 0,
-  };
+  let scholarshipQuery = db
+    .from('scholarships')
+    .select('id, name, amount, status, academic_year, application_deadline, filled_slots, available_slots');
+  if (academicYear) scholarshipQuery = scholarshipQuery.eq('academic_year', academicYear);
+  if (scholarshipStatus) scholarshipQuery = scholarshipQuery.eq('status', scholarshipStatus);
+  const { data: scholarships, error: scholarshipsErr } = await scholarshipQuery.limit(1000);
+  if (scholarshipsErr) throw ApiError.internal(`Failed to fetch scholarships: ${scholarshipsErr.message}`);
 
-  const scholarshipSummary = scholarshipTotals[0] ?? {
-    totalAmount: 0,
-    totalScholarships: 0,
-    totalBeneficiaries: 0,
-    availableSlots: 0,
-  };
+  const totals = (recentPayments || []).reduce(
+    (acc, p: PaymentRow) => {
+      acc.totalCount += 1;
+      acc.totalAmount += Number(p.amount || 0);
+      if (p.status === PAYMENT_STATUS.VERIFIED) acc.verifiedAmount += Number(p.amount || 0);
+      if (p.status === PAYMENT_STATUS.PENDING) acc.pendingAmount += Number(p.amount || 0);
+      if (p.status === PAYMENT_STATUS.REJECTED) acc.rejectedAmount += Number(p.amount || 0);
+      if (p.status === PAYMENT_STATUS.PROCESSING) acc.processingAmount += Number(p.amount || 0);
+      return acc;
+    },
+    { totalCount: 0, totalAmount: 0, verifiedAmount: 0, pendingAmount: 0, rejectedAmount: 0, processingAmount: 0 }
+  );
+
+  const scholarshipSummary = (scholarships || []).reduce(
+    (acc, s: ScholarshipRow) => {
+      acc.totalScholarships += 1;
+      acc.totalAmount += Number(s.amount || 0);
+      acc.totalBeneficiaries += Number(s.filled_slots || 0);
+      acc.availableSlots += Number(s.available_slots || 0);
+      return acc;
+    },
+    { totalAmount: 0, totalScholarships: 0, totalBeneficiaries: 0, availableSlots: 0 }
+  );
+
+  const byStatus = mapBreakdown((recentPayments || []) as PaymentRow[], 'status');
+  const byType = mapBreakdown((recentPayments || []) as PaymentRow[], 'type');
+
+  const scholarshipBreakdown = (scholarships || []).reduce(
+    (acc: Record<string, { count: number; amount: number; beneficiaries: number }>, s: ScholarshipRow) => {
+      const key = s.status;
+      acc[key] = acc[key] || { count: 0, amount: 0, beneficiaries: 0 };
+      acc[key].count += 1;
+      acc[key].amount += Number(s.amount || 0);
+      acc[key].beneficiaries += Number(s.filled_slots || 0);
+      return acc;
+    },
+    {}
+  );
+
+  const scholarshipTimelineMap = (scholarships || []).reduce(
+    (acc: Record<string, { totalAmount: number; scholarships: number; beneficiaries: number }>, s: ScholarshipRow) => {
+      const key = s.academic_year;
+      acc[key] = acc[key] || { totalAmount: 0, scholarships: 0, beneficiaries: 0 };
+      acc[key].totalAmount += Number(s.amount || 0);
+      acc[key].scholarships += 1;
+      acc[key].beneficiaries += Number(s.filled_slots || 0);
+      return acc;
+    },
+    {}
+  );
+  const scholarshipTimeline = Object.entries(scholarshipTimelineMap)
+    .sort((a, b) => (a[0] > b[0] ? -1 : 1))
+    .slice(0, 5)
+    .map(([academicYear, v]) => ({ academicYear, totalAmount: v.totalAmount, scholarships: v.scholarships, beneficiaries: v.beneficiaries }));
+
+  const recentScholarships = (scholarships || []).slice(0, 5);
 
   res.json(
     ApiResponse.success('Bursary reports retrieved successfully', {
@@ -281,66 +256,60 @@ export const getBursaryReports = asyncHandler(async (req: Request, res: Response
       payments: {
         totals: {
           ...totals,
-          averageTransaction:
-            totals.totalCount > 0 ? parseFloat((totals.totalAmount / totals.totalCount).toFixed(2)) : 0,
+          averageTransaction: totals.totalCount > 0 ? parseFloat((totals.totalAmount / totals.totalCount).toFixed(2)) : 0,
         },
-        byStatus: mapBreakdown(statusBreakdown),
-        byType: mapBreakdown(typeBreakdown),
-        recent: recentPayments.map((payment: any) => ({
-          id: payment._id,
-          reference: payment.reference,
-          amount: payment.amount,
-          status: payment.status,
-          type: payment.type,
-          recordedAt: payment.createdAt,
-          paymentDate: payment.paymentDate,
-          student: payment.student
-            ? {
-                id: payment.student._id,
-                name: `${payment.student.firstName} ${payment.student.lastName}`,
-                email: payment.student.email,
-                studentId: payment.student.studentId,
-              }
-            : null,
-          session: payment.session ? (payment.session as any).name : null,
-          semester: payment.semester,
-        })),
+        byStatus,
+        byType,
+        recent: (recentPayments || []).map((payment: PaymentRow) => {
+          const studentJoin = Array.isArray(payment.student) ? payment.student[0] : payment.student;
+          return {
+            id: payment.id,
+            reference: payment.reference,
+            amount: payment.amount,
+            status: payment.status,
+            type: payment.type,
+            recordedAt: payment.created_at,
+            paymentDate: payment.payment_date,
+            student: studentJoin
+              ? {
+                  id: studentJoin.id,
+                  name: `${studentJoin.first_name} ${studentJoin.last_name}`,
+                  email: studentJoin.email,
+                  student_id: studentJoin.student_id,
+                }
+              : null,
+            session: payment.session || null,
+            semester: payment.semester || null,
+          };
+        }),
       },
       scholarships: {
         summary: scholarshipSummary,
-        byStatus: scholarshipBreakdown.map((doc) => ({
-          key: doc._id,
-          count: doc.count,
-          amount: doc.amount,
-          beneficiaries: doc.beneficiaries,
-        })),
-        timeline: scholarshipTimeline.map((doc) => ({
-          academicYear: doc._id,
-          totalAmount: doc.totalAmount,
-          scholarships: doc.scholarships,
-          beneficiaries: doc.beneficiaries,
-        })),
+        byStatus: Object.entries(scholarshipBreakdown).map(([key, v]) => ({ key, count: v.count, amount: v.amount, beneficiaries: v.beneficiaries })),
+        timeline: scholarshipTimeline,
         recent: recentScholarships,
       },
     })
   );
 });
 
-const buildReportRows = (payments: any[]): ReportRow[] =>
+const buildReportRows = (payments: PaymentRow[]): ReportRow[] =>
   payments.map((payment) => ({
     reference: payment.reference,
     studentName: payment.student
-      ? `${payment.student.firstName} ${payment.student.lastName}`
+      ? `${(Array.isArray(payment.student) ? payment.student[0].first_name : payment.student.first_name)} ${
+          (Array.isArray(payment.student) ? payment.student[0].last_name : payment.student.last_name)
+        }`
       : 'Unknown',
-    studentId: payment.student?.studentId ?? 'N/A',
-    email: payment.student?.email ?? 'N/A',
+    student_id: (Array.isArray(payment.student) ? payment.student[0]?.student_id : payment.student?.student_id) ?? 'N/A',
+    email: (Array.isArray(payment.student) ? payment.student[0]?.email : payment.student?.email) ?? 'N/A',
     type: payment.type,
     status: payment.status,
     amount: payment.amount,
-    session: payment.session ? (payment.session as any).name : 'N/A',
-    semester: payment.semester,
-    paymentDate: payment.paymentDate ?? null,
-    recordedAt: payment.createdAt,
+    session: payment.session || 'N/A',
+    semester: payment.semester ?? null,
+    paymentDate: payment.payment_date ?? null,
+    recordedAt: payment.created_at,
   }));
 
 const escapeCsv = (value: string | number | null | undefined) => {
@@ -372,7 +341,7 @@ const buildCsvPayload = (rows: ReportRow[]) => {
       [
         row.reference,
         row.studentName,
-        row.studentId,
+        row.student_id,
         row.email,
         row.type,
         row.status,
@@ -421,6 +390,7 @@ const buildPdfLikePayload = (rows: ReportRow[], summary: ReportSummary) => {
 };
 
 export const generateBursaryReport = asyncHandler(async (req: Request, res: Response) => {
+  const db = supabaseAdmin();
   const { format = 'json', filters = {}, includeScholarships = false, limit = 500 } = req.body;
   const normalizedFormat = String(format).toLowerCase();
 
@@ -434,23 +404,27 @@ export const generateBursaryReport = asyncHandler(async (req: Request, res: Resp
   const startRange = parseDateInput(filters.startDate);
   const endRange = parseDateInput(filters.endDate);
 
-  const paymentFilter = buildPaymentFilter({
-    sessionId: sessionFilter,
-    statuses: statusFilters,
-    types: typeFilters,
-    startDate: startRange,
-    endDate: endRange,
-  });
+  const paymentFilter = buildPaymentFilter({ sessionId: sessionFilter, statuses: statusFilters, types: typeFilters, startDate: startRange, endDate: endRange });
 
   const sanitizedLimit = Math.min(Math.max(Number(limit) || 500, 1), 2000);
 
-  const payments = await Payment.find(paymentFilter)
-    .populate('student', 'firstName lastName email studentId')
-    .populate('session', 'name')
-    .sort({ createdAt: -1 })
+  let paymentsQuery = db
+    .from('payments')
+    .select('id, reference, amount, status, type, created_at, payment_date, student:profiles(id,first_name,last_name,email,student_id), session, semester')
+    .order('created_at', { ascending: false })
     .limit(sanitizedLimit);
+  if (paymentFilter.sessionId) paymentsQuery = paymentsQuery.eq('session', paymentFilter.sessionId);
+  if (paymentFilter.statuses && paymentFilter.statuses.length === 1) paymentsQuery = paymentsQuery.eq('status', paymentFilter.statuses[0]);
+  if (paymentFilter.statuses && paymentFilter.statuses.length > 1) paymentsQuery = paymentsQuery.in('status', paymentFilter.statuses);
+  if (paymentFilter.types && paymentFilter.types.length === 1) paymentsQuery = paymentsQuery.eq('type', paymentFilter.types[0]);
+  if (paymentFilter.types && paymentFilter.types.length > 1) paymentsQuery = paymentsQuery.in('type', paymentFilter.types);
+  if (paymentFilter.startDate) paymentsQuery = paymentsQuery.gte('created_at', paymentFilter.startDate.toISOString());
+  if (paymentFilter.endDate) paymentsQuery = paymentsQuery.lte('created_at', paymentFilter.endDate.toISOString());
 
-  const rows = buildReportRows(payments as any[]);
+  const { data: payments, error } = await paymentsQuery;
+  if (error) throw ApiError.internal(`Failed to fetch payments: ${error.message}`);
+
+  const rows = buildReportRows((payments || []) as PaymentRow[]);
 
   const summary = rows.reduce<ReportSummary>(
     (acc, row) => {
@@ -480,27 +454,29 @@ export const generateBursaryReport = asyncHandler(async (req: Request, res: Resp
   summary.averageTransaction =
     summary.totalTransactions > 0 ? parseFloat((summary.totalAmount / summary.totalTransactions).toFixed(2)) : 0;
 
-  let scholarshipSummary: any;
+  let scholarshipSummary: Array<{ status: string; count: number; amount: number; beneficiaries: number }> | null = null;
   if (includeScholarships) {
-    const data = await Scholarship.aggregate([
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 },
-          amount: { $sum: '$amount' },
-          beneficiaries: { $sum: '$filledSlots' },
-        },
+    const { data: scholarships, error: sErr } = await db
+      .from('scholarships')
+      .select('id, status, amount, filled_slots')
+      .limit(2000);
+    if (sErr) throw ApiError.internal(`Failed to fetch scholarships: ${sErr.message}`);
+    const breakdown = (scholarships || []).reduce(
+      (acc: Record<string, { count: number; amount: number; beneficiaries: number }>, s: ScholarshipRow) => {
+        const key = s.status;
+        acc[key] = acc[key] || { count: 0, amount: 0, beneficiaries: 0 };
+        acc[key].count += 1;
+        acc[key].amount += Number(s.amount || 0);
+        acc[key].beneficiaries += Number(s.filled_slots || 0);
+        return acc;
       },
-    ]);
-    scholarshipSummary = data.map((doc) => ({
-      status: doc._id,
-      count: doc.count,
-      amount: doc.amount,
-      beneficiaries: doc.beneficiaries,
-    }));
+      {}
+    );
+    scholarshipSummary = Object.entries(breakdown).map(([status, v]) => ({ status, count: v.count, amount: v.amount, beneficiaries: v.beneficiaries }));
   }
 
-  let filePayload: any;
+  type FilePayload = { fileName: string; mimeType: string; size: number; content: string };
+  let filePayload: FilePayload | null = null;
   if (normalizedFormat === 'csv') {
     filePayload = buildCsvPayload(rows);
   } else if (normalizedFormat === 'pdf') {
@@ -523,10 +499,11 @@ export const generateBursaryReport = asyncHandler(async (req: Request, res: Resp
         },
       },
       summary,
-      scholarshipSummary: scholarshipSummary ?? null,
+      scholarshipSummary,
       rows: normalizedFormat === 'json' ? rows : undefined,
       preview: normalizedFormat === 'json' ? undefined : rows.slice(0, 10),
       file: filePayload ?? null,
     })
   );
 });
+

@@ -3,6 +3,11 @@ import logger from './logger';
 
 const connectDatabase = async (): Promise<void> => {
   try {
+    if (process.env.AUTH_STRATEGY === 'supabase' || process.env.DB_STRATEGY === 'supabase') {
+      logger.info('Skipping MongoDB connection (Supabase mode)');
+      return;
+    }
+
     const mongoUri =
       (process.env.NODE_ENV === 'test' && process.env.MONGODB_TEST_URI) ||
       process.env.MONGODB_URI ||

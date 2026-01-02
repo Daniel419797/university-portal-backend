@@ -83,6 +83,10 @@ This guide covers deploying the University Portal Backend to various cloud platf
 
 ## Gmail SMTP Setup
 
+> Note: If you switch to **Supabase Auth** for login/signup, email verification, and password resets,
+> you can skip Gmail SMTP for those flows (Supabase sends the emails). You may still keep SMTP for
+> other non-auth notifications.
+
 1. **Enable 2-Factor Authentication**
    - Go to Google Account settings
    - Security → 2-Step Verification
@@ -126,6 +130,11 @@ This guide covers deploying the University Portal Backend to various cloud platf
    - Select your project
    - Go to "Variables" tab
    - Add all environment variables from `.env.example`
+
+   **If using Supabase Auth (recommended to avoid SMTP blocks on some hosts):**
+   - Set `AUTH_STRATEGY=supabase`
+   - Set `SUPABASE_URL=https://<your-project-ref>.supabase.co`
+   - (Optional) `SUPABASE_JWT_AUDIENCE=authenticated`
 
 4. **Deploy**
    ```bash

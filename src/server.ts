@@ -7,12 +7,19 @@ import connectRedis from './config/redis';
 import initializeCloudinary from './config/cloudinary';
 import initializeEmail from './config/email';
 import logger from './config/logger';
+import { checkSupabaseConnection, isSupabaseConfigured } from './config/supabase';
 
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   try {
-    // Connect to MongoDB
+    // Supabase-only deployments: verify Supabase connectivity first.
+    if (isSupabaseConfigured()) {
+      await checkSupabaseConnection();
+      logger.info('Supabase connectivity check passed');
+    }
+
+    // Connect to MongoDB (legacy - will be removed once migration completes)
     await connectDatabase();
 
     // Initialize Redis (optional)

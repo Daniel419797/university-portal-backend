@@ -1,38 +1,79 @@
+// =============================================================================
+// MIGRATION STATUS: AUTO-CONVERTED - REQUIRES MANUAL REVIEW
+// =============================================================================
+// This file has been automatically migrated from MongoDB to Supabase.
+// Search for /* MIGRATE: */ comments to find areas needing manual completion.
+// 
+// Key changes needed:
+// 1. Complete query conversions (findById, find, create, etc.)
+// 2. Add error handling for Supabase queries
+// 3. Convert .populate() to JOIN syntax
+// 4. Update field names (camelCase -> snake_case)
+// 5. Test all endpoints
+// 
+// Original backup: c:\Users\HP\Desktop\university-portal-backend\backup-mongodb-20260102-062910\material.controller.ts
+// =============================================================================
 import { Request, Response } from 'express';
+import { supabaseAdmin } from '../config/supabase';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse } from '../utils/ApiResponse';
-import CourseMaterial from '../models/CourseMaterial.model';
-import Course from '../models/Course.model';
-import Enrollment from '../models/Enrollment.model';
+import { ApiError } from '../utils/ApiError';
+import { USER_ROLES } from '../utils/constants';
 import uploadService from '../services/upload.service';
+
+// Typed rows for safety
+interface MaterialRow {
+  id: string;
+  course_id: string;
+  title: string;
+  description?: string | null;
+  type: string;
+  file_url: string;
+  file_name: string;
+  file_size: number;
+  uploaded_by: string;
+  uploaded_at?: string;
+  downloads: number;
+  is_active: boolean;
+}
+
+interface ProfileRow {
+  id: string; // user id
+  first_name: string;
+  last_name: string;
+}
 
 // @desc    Upload course material (Lecturer)
 // @route   POST /api/v1/courses/:id/materials
 // @access  Private (Lecturer)
 export const uploadCourseMaterial = asyncHandler(async (req: Request, res: Response) => {
+  const db = supabaseAdmin();
   const { id: courseId } = req.params;
-  const userId = (req as any).user.id;
-  const { title, description, type } = req.body;
+  const userId = req.user?.userId || req.user?._id?.toString();
+  const { title, description, type } = req.body as { title: string; description?: string; type?: string };
 
-  // Verify course exists and user is the instructor
-  const course = await Course.findById(courseId);
-  if (!course) {
-    res.status(404);
-    throw new Error('Course not found');
-  }
+  if (!userId) throw ApiError.unauthorized('User not authenticated');
+  if (!title) throw ApiError.badRequest('Title is required');
 
-  if (course.lecturer.toString() !== userId) {
-    res.status(403);
-    throw new Error('Not authorized to upload materials for this course');
+  // Verify course exists and user is the instructor or admin
+  const { data: course, error: courseError } = await db
+    .from('courses')
+    .select('id, lecturer_id')
+    .eq('id', courseId)
+    .maybeSingle();
+
+  if (courseError) throw ApiError.internal(`Failed to fetch course: ${courseError.message}`);
+  if (!course) throw ApiError.notFound('Course not found');
+
+  if (req.user?.role !== USER_ROLES.ADMIN && course.lecturer_id !== userId) {
+    throw ApiError.forbidden('Not authorized to upload materials for this course');
   }
 
   // Check if file was uploaded
-  if (!(req as any).file) {
-    res.status(400);
-    throw new Error('Please upload a file');
+  const file = (req as Request & { file?: Express.Multer.File }).file;
+  if (!file) {
+    throw ApiError.badRequest('Please upload a file');
   }
-
-  const file = (req as any).file;
 
   // Upload to Cloudinary
   const uploadResult = file.buffer
@@ -40,85 +81,110 @@ export const uploadCourseMaterial = asyncHandler(async (req: Request, res: Respo
     : await uploadService.uploadFile(file.path, 'course-materials', 'raw');
 
   // Create material record
-  const material = await CourseMaterial.create({
-    course: courseId,
-    title,
-    description,
-    type: type || 'pdf',
-    fileUrl: uploadResult.url,
-    fileName: file.originalname,
-    fileSize: file.size,
-    uploadedBy: userId
-  });
+  const { data: material, error } = await db
+    .from('course_materials')
+    .insert({
+      course_id: courseId,
+      title,
+      description: description || null,
+      type: type || 'pdf',
+      file_url: uploadResult.url,
+      file_name: file.originalname,
+      file_size: file.size,
+      uploaded_by: userId,
+      is_active: true,
+      downloads: 0,
+    })
+    .select()
+    .single();
 
-  const populatedMaterial = await CourseMaterial.findById(material._id)
-    .populate('uploadedBy', 'firstName lastName email');
+  if (error) throw ApiError.internal(`Failed to create material: ${error.message}`);
 
-  res.status(201).json(
-    ApiResponse.success('Material uploaded successfully', populatedMaterial)
-  );
+  res.status(201).json(ApiResponse.success('Material uploaded successfully', material));
 });
 
 // @desc    Get course materials (Students & Lecturers)
 // @route   GET /api/v1/courses/:id/materials
 // @access  Private
 export const getCourseMaterials = asyncHandler(async (req: Request, res: Response) => {
+  const db = supabaseAdmin();
   const { id: courseId } = req.params;
-  const userId = (req as any).user.id;
-  const userRole = (req as any).user.role;
+  const userId = req.user?.userId || req.user?._id?.toString();
+  const userRole = req.user?.role;
+
+  if (!userId) throw ApiError.unauthorized('User not authenticated');
 
   // Verify course exists
-  const course = await Course.findById(courseId);
-  if (!course) {
-    res.status(404);
-    throw new Error('Course not found');
-  }
+  const { data: course, error: courseError } = await db
+    .from('courses')
+    .select('id, lecturer_id')
+    .eq('id', courseId)
+    .maybeSingle();
+
+  if (courseError) throw ApiError.internal(`Failed to fetch course: ${courseError.message}`);
+  if (!course) throw ApiError.notFound('Course not found');
 
   // If student, verify enrollment
-  if (userRole === 'student') {
-    const enrollment = await Enrollment.findOne({
-      student: userId,
-      course: courseId,
-      status: 'active'
-    });
+  if (userRole === USER_ROLES.STUDENT) {
+    const { data: enrollment } = await db
+      .from('enrollments')
+      .select('id')
+      .eq('student_id', userId)
+      .eq('course_id', courseId)
+      .eq('status', 'active')
+      .maybeSingle();
 
     if (!enrollment) {
-      res.status(403);
-      throw new Error('You are not enrolled in this course');
+      throw ApiError.forbidden('You are not enrolled in this course');
     }
   }
 
-  // If lecturer, verify they're teaching the course
-  if (userRole === 'lecturer' && course.lecturer.toString() !== userId) {
-    res.status(403);
-    throw new Error('Not authorized to view materials for this course');
+  // If lecturer, verify they're teaching the course (non-admin)
+  if (userRole === USER_ROLES.LECTURER && course.lecturer_id !== userId) {
+    throw ApiError.forbidden('Not authorized to view materials for this course');
   }
 
   // Get materials
-  const materials = await CourseMaterial.find({
-    course: courseId,
-    isActive: true
-  })
-    .populate('uploadedBy', 'firstName lastName')
-    .sort({ uploadedAt: -1 });
+  const { data: materials, error } = await db
+    .from('course_materials')
+    .select('*')
+    .eq('course_id', courseId)
+    .eq('is_active', true)
+    .order('uploaded_at', { ascending: false });
+
+  if (error) throw ApiError.internal(`Failed to fetch materials: ${error.message}`);
+
+  const items = (materials || []) as MaterialRow[];
+  const uploaderIds = Array.from(new Set(items.map((m) => m.uploaded_by).filter(Boolean)));
+
+  const profilesMap = new Map<string, ProfileRow>();
+  if (uploaderIds.length > 0) {
+    const { data: profiles, error: profilesError } = await db
+      .from('profiles')
+      .select('id, first_name, last_name')
+      .in('id', uploaderIds);
+    if (profilesError) throw ApiError.internal(`Failed to fetch uploader profiles: ${profilesError.message}`);
+    (profiles || []).forEach((p) => profilesMap.set(p.id, p as ProfileRow));
+  }
 
   res.json(
     ApiResponse.success('Materials fetched successfully', {
-      materials: materials.map(m => ({
-        id: m._id,
-        title: m.title,
-        description: m.description,
-        type: m.type,
-        fileUrl: m.fileUrl,
-        fileName: m.fileName,
-        fileSize: m.fileSize,
-        uploadedBy: {
-          name: (m.uploadedBy as any).firstName + ' ' + (m.uploadedBy as any).lastName
-        },
-        uploadedAt: m.uploadedAt,
-        downloads: m.downloads
-      })),
-      total: materials.length
+      materials: items.map((m) => {
+        const uploader = profilesMap.get(m.uploaded_by);
+        return {
+          id: m.id,
+          title: m.title,
+          description: m.description,
+          type: m.type,
+          fileUrl: m.file_url,
+          fileName: m.file_name,
+          fileSize: m.file_size,
+          uploadedBy: uploader ? { name: `${uploader.first_name} ${uploader.last_name}` } : { name: undefined },
+          uploadedAt: m.uploaded_at,
+          downloads: m.downloads,
+        };
+      }),
+      total: items.length,
     })
   );
 });
@@ -127,42 +193,52 @@ export const getCourseMaterials = asyncHandler(async (req: Request, res: Respons
 // @route   POST /api/v1/courses/:id/materials/:materialId/download
 // @access  Private (Student)
 export const downloadCourseMaterial = asyncHandler(async (req: Request, res: Response) => {
+  const db = supabaseAdmin();
   const { id: courseId, materialId } = req.params;
-  const userId = (req as any).user.id;
+  const userId = req.user?.userId || req.user?._id?.toString();
+
+  if (!userId) throw ApiError.unauthorized('User not authenticated');
 
   // Verify enrollment
-  const enrollment = await Enrollment.findOne({
-    student: userId,
-    course: courseId,
-    status: 'active'
-  });
+  const { data: enrollment } = await db
+    .from('enrollments')
+    .select('id')
+    .eq('student_id', userId)
+    .eq('course_id', courseId)
+    .eq('status', 'active')
+    .maybeSingle();
 
   if (!enrollment) {
-    res.status(403);
-    throw new Error('You are not enrolled in this course');
+    throw ApiError.forbidden('You are not enrolled in this course');
   }
 
   // Get material
-  const material = await CourseMaterial.findById(materialId);
-  if (!material) {
-    res.status(404);
-    throw new Error('Material not found');
-  }
+  const { data: material, error: materialError } = await db
+    .from('course_materials')
+    .select('*')
+    .eq('id', materialId)
+    .maybeSingle();
 
-  if (material.course.toString() !== courseId) {
-    res.status(400);
-    throw new Error('Material does not belong to this course');
+  if (materialError) throw ApiError.internal(`Failed to fetch material: ${materialError.message}`);
+  if (!material) throw ApiError.notFound('Material not found');
+  if (material.course_id !== courseId) {
+    throw ApiError.badRequest('Material does not belong to this course');
   }
 
   // Increment download count
-  material.downloads += 1;
-  await material.save();
+  const newDownloads = (material.downloads || 0) + 1;
+  const { error: updateError } = await db
+    .from('course_materials')
+    .update({ downloads: newDownloads, updated_at: new Date().toISOString() })
+    .eq('id', materialId);
+
+  if (updateError) throw ApiError.internal(`Failed to update download count: ${updateError.message}`);
 
   res.json(
     ApiResponse.success('Material download link retrieved', {
-      fileUrl: material.fileUrl,
-      fileName: material.fileName,
-      fileSize: material.fileSize
+      fileUrl: material.file_url,
+      fileName: material.file_name,
+      fileSize: material.file_size,
     })
   );
 });
@@ -171,48 +247,58 @@ export const downloadCourseMaterial = asyncHandler(async (req: Request, res: Res
 // @route   DELETE /api/v1/courses/:id/materials/:materialId
 // @access  Private (Lecturer)
 export const deleteCourseMaterial = asyncHandler(async (req: Request, res: Response) => {
+  const db = supabaseAdmin();
   const { id: courseId, materialId } = req.params;
-  const userId = (req as any).user.id;
+  const userId = req.user?.userId || req.user?._id?.toString();
+
+  if (!userId) throw ApiError.unauthorized('User not authenticated');
 
   // Verify course and authorization
-  const course = await Course.findById(courseId);
-  if (!course) {
-    res.status(404);
-    throw new Error('Course not found');
+  const { data: course, error: courseError } = await db
+    .from('courses')
+    .select('id, lecturer_id')
+    .eq('id', courseId)
+    .maybeSingle();
+
+  if (courseError) throw ApiError.internal(`Failed to fetch course: ${courseError.message}`);
+  if (!course) throw ApiError.notFound('Course not found');
+
+  if (req.user?.role !== USER_ROLES.ADMIN && course.lecturer_id !== userId) {
+    throw ApiError.forbidden('Not authorized to delete materials for this course');
   }
 
-  if (course.lecturer.toString() !== userId) {
-    res.status(403);
-    throw new Error('Not authorized to delete materials for this course');
-  }
+  // Get material
+  const { data: material, error: materialError } = await db
+    .from('course_materials')
+    .select('*')
+    .eq('id', materialId)
+    .maybeSingle();
 
-  // Get and delete material
-  const material = await CourseMaterial.findById(materialId);
-  if (!material) {
-    res.status(404);
-    throw new Error('Material not found');
-  }
-
-  if (material.course.toString() !== courseId) {
-    res.status(400);
-    throw new Error('Material does not belong to this course');
+  if (materialError) throw ApiError.internal(`Failed to fetch material: ${materialError.message}`);
+  if (!material) throw ApiError.notFound('Material not found');
+  if (material.course_id !== courseId) {
+    throw ApiError.badRequest('Material does not belong to this course');
   }
 
   // Delete from Cloudinary (if it's a Cloudinary URL)
-  if (material.fileUrl.includes('cloudinary')) {
+  if (material.file_url && material.file_url.includes('cloudinary')) {
     try {
-      const publicId = material.fileUrl.split('/').slice(-2).join('/').split('.')[0];
+      const publicId = material.file_url.split('/').slice(-2).join('/').split('.')[0];
       await uploadService.deleteFile(publicId, 'raw');
-    } catch (error) {
-      console.error('Error deleting from Cloudinary:', error);
+    } catch (err) {
+      // Best-effort delete; log and continue
+      console.error('Error deleting from Cloudinary:', err);
     }
   }
 
   // Soft delete
-  material.isActive = false;
-  await material.save();
+  const { error: deleteError } = await db
+    .from('course_materials')
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq('id', materialId);
 
-  res.json(
-    ApiResponse.success('Material deleted successfully', null)
-  );
+  if (deleteError) throw ApiError.internal(`Failed to delete material: ${deleteError.message}`);
+
+  res.json(ApiResponse.success('Material deleted successfully', null));
 });
+

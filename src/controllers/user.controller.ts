@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
-import User from '../models/User.model';
+import User, { IUser } from '../models/User.model';
+import type { FilterQuery } from 'mongoose';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiError } from '../utils/ApiError';
 import { ApiResponse } from '../utils/ApiResponse';
@@ -7,10 +8,54 @@ import uploadService from '../services/upload.service';
 import { USER_ROLES } from '../utils/constants';
 import bcrypt from 'bcrypt';
 import AuditLog from '../models/AuditLog.model';
+import { supabaseAdmin } from '../config/supabase';
+
+type ProfileRow = {
+  id: string;
+  email?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  role?: string | null;
+  avatar?: string | null;
+  student_id?: string | null;
+  department_id?: string | null;
+  level?: string | null;
+  phone_number?: string | null;
+  address?: string | null;
+  date_of_birth?: string | null;
+  nationality?: string | null;
+  state_of_origin?: string | null;
+  blood_group?: string | null;
+  emergency_contact?: unknown;
+  is_active?: boolean | null;
+  deleted_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+type DepartmentRow = {
+  name?: string | null;
+  code?: string | null;
+  faculty?: string | null;
+};
+
+type ProfileWithDepartment = ProfileRow & {
+  departments?: DepartmentRow | null;
+};
+
+function isSupabaseMode(): boolean {
+  return process.env.AUTH_STRATEGY === 'supabase' || process.env.DB_STRATEGY === 'supabase';
+}
+
+function requireSupabaseAdmin() {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    throw ApiError.internal('SUPABASE_SERVICE_ROLE_KEY is required for Supabase DB operations');
+  }
+  return supabaseAdmin();
+}
 
 const getAuthenticatedUserId = (req: Request): string => {
-  const authUser = (req as any).user;
-  return authUser?._id?.toString() || authUser?.userId;
+  return req.user?.userId || (req.user?._id ? String(req.user._id) : '');
 };
 
 /**
@@ -19,9 +64,70 @@ const getAuthenticatedUserId = (req: Request): string => {
  * @access  Private (Admin, HOD)
  */
 export const getUsers = asyncHandler(async (req: Request, res: Response) => {
+  if (isSupabaseMode()) {
+    const { role, department, search, page = 1, limit = 20, isActive } = req.query;
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const from = (pageNum - 1) * limitNum;
+    const to = from + limitNum - 1;
+
+    const db = requireSupabaseAdmin();
+    let q = db
+      .from('profiles')
+      .select(
+        'id,email,first_name,last_name,role,avatar,student_id,department_id,level,is_active,created_at,departments(name,code)',
+        { count: 'exact' }
+      )
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (role) q = q.eq('role', String(role));
+    if (department) q = q.eq('department_id', String(department));
+    if (isActive !== undefined) q = q.eq('is_active', String(isActive) === 'true');
+    if (search) {
+      const s = String(search);
+      q = q.or(
+        `first_name.ilike.%${s}%,last_name.ilike.%${s}%,email.ilike.%${s}%,student_id.ilike.%${s}%`
+      );
+    }
+
+    const { data, error, count } = await q;
+    if (error) {
+      throw ApiError.internal(`Failed to load users: ${error.message}`);
+    }
+
+    res.json(
+      ApiResponse.success('Data retrieved successfully', {
+        users: (data || []).map((row) => {
+          const r = row as unknown as ProfileWithDepartment;
+          return {
+            id: r.id,
+            email: r.email,
+            firstName: r.first_name,
+            lastName: r.last_name,
+            role: r.role,
+            avatar: r.avatar,
+            studentId: r.student_id,
+            department: r.departments || null,
+            level: r.level,
+            isActive: r.is_active,
+            createdAt: r.created_at,
+          };
+        }),
+        pagination: {
+          total: count || 0,
+          page: pageNum,
+          pages: Math.ceil((count || 0) / limitNum),
+          limit: limitNum,
+        },
+      })
+    );
+    return;
+  }
+
   const { role, department, search, page = 1, limit = 20, isActive } = req.query;
 
-  const query: any = {};
+  const query: FilterQuery<IUser> = {};
 
   if (role) query.role = role;
   if (department) query.department = department;
@@ -29,11 +135,12 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
 
   // Search by name, email, or studentId
   if (search) {
+    const searchStr = String(search);
     query.$or = [
-      { firstName: { $regex: search, $options: 'i' } },
-      { lastName: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } },
-      { studentId: { $regex: search, $options: 'i' } },
+      { firstName: { $regex: searchStr, $options: 'i' } },
+      { lastName: { $regex: searchStr, $options: 'i' } },
+      { email: { $regex: searchStr, $options: 'i' } },
+      { studentId: { $regex: searchStr, $options: 'i' } },
     ];
   }
 
@@ -44,8 +151,8 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
   const [users, total] = await Promise.all([
     User.find(query)
       .select('-password -refreshToken -passwordResetToken -emailVerificationToken')
-      .populate('department', 'name code')
-      .sort({ createdAt: -1 })
+      
+      
       .skip(skip)
       .limit(limitNum),
     User.countDocuments(query),
@@ -70,19 +177,57 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
  * @access  Private (Admin, HOD, or own profile)
  */
 export const getUserById = asyncHandler(async (req: Request, res: Response) => {
+  if (isSupabaseMode()) {
+    const db = requireSupabaseAdmin();
+    const { data, error } = await db
+      .from('profiles')
+      .select('*,departments(name,code,faculty)')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
+    if (error) {
+      throw ApiError.internal(`Failed to load user: ${error.message}`);
+    }
+    if (!data) {
+      throw ApiError.notFound('User not found');
+    }
+
+    const authUserId = getAuthenticatedUserId(req);
+    if (req.user?.role === USER_ROLES.STUDENT && data.id !== authUserId) {
+      throw ApiError.forbidden('You can only view your own profile');
+    }
+
+    const profile = data as unknown as ProfileWithDepartment;
+    res.json(
+      ApiResponse.success('Data retrieved successfully', {
+        id: profile.id,
+        email: profile.email,
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+        role: profile.role,
+        avatar: profile.avatar,
+        studentId: profile.student_id,
+        department: profile.departments || null,
+        level: profile.level,
+        isActive: profile.is_active,
+        deletedAt: profile.deleted_at,
+        createdAt: profile.created_at,
+        updatedAt: profile.updated_at,
+      })
+    );
+    return;
+  }
+
   const user = await User.findById(req.params.id)
     .select('-password -refreshToken -passwordResetToken -emailVerificationToken')
-    .populate('department', 'name code faculty');
+    ;
 
   if (!user) {
     throw ApiError.notFound('User not found');
   }
 
   // Students can only view their own profile
-  if (
-    (req as any).user.role === USER_ROLES.STUDENT &&
-    user._id.toString() !== (req as any).user._id.toString()
-  ) {
+  if (req.user?.role === USER_ROLES.STUDENT && user._id.toString() !== String(req.user?._id)) {
     throw ApiError.forbidden('You can only view your own profile');
   }
 
@@ -95,6 +240,74 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
  * @access  Private (Admin or own profile)
  */
 export const updateUser = asyncHandler(async (req: Request, res: Response) => {
+  if (isSupabaseMode()) {
+    const db = requireSupabaseAdmin();
+    const authUserId = getAuthenticatedUserId(req);
+
+    const { data: existing, error: loadErr } = await db
+      .from('profiles')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
+    if (loadErr) throw ApiError.internal(`Failed to load user: ${loadErr.message}`);
+    if (!existing) throw ApiError.notFound('User not found');
+
+    if (req.user?.role !== USER_ROLES.ADMIN && existing.id !== authUserId) {
+      throw ApiError.forbidden('You can only update your own profile');
+    }
+
+    const {
+      firstName,
+      lastName,
+      phoneNumber,
+      address,
+      dateOfBirth,
+      nationality,
+      stateOfOrigin,
+      bloodGroup,
+      emergencyContact,
+    } = req.body;
+
+    const patch: Partial<ProfileRow> & Record<string, unknown> = {};
+    if (firstName) patch.first_name = firstName;
+    if (lastName) patch.last_name = lastName;
+    if (phoneNumber) patch.phone_number = phoneNumber;
+    if (address) patch.address = address;
+    if (dateOfBirth) patch.date_of_birth = dateOfBirth;
+    if (nationality) patch.nationality = nationality;
+    if (stateOfOrigin) patch.state_of_origin = stateOfOrigin;
+    if (bloodGroup) patch.blood_group = bloodGroup;
+    if (emergencyContact) patch.emergency_contact = emergencyContact;
+
+    const { data: updated, error: updateErr } = await db
+      .from('profiles')
+      .update(patch)
+      .eq('id', req.params.id)
+      .select('*')
+      .single();
+
+    if (updateErr) throw ApiError.internal(`Failed to update profile: ${updateErr.message}`);
+
+    const updatedProfile = updated as unknown as ProfileRow;
+
+    res.json(
+      ApiResponse.success('Profile updated successfully', {
+        id: updatedProfile.id,
+        email: updatedProfile.email,
+        firstName: updatedProfile.first_name,
+        lastName: updatedProfile.last_name,
+        role: updatedProfile.role,
+        avatar: updatedProfile.avatar,
+        studentId: updatedProfile.student_id,
+        departmentId: updatedProfile.department_id,
+        level: updatedProfile.level,
+        isActive: updatedProfile.is_active,
+      })
+    );
+    return;
+  }
+
   const user = await User.findById(req.params.id);
 
   if (!user) {
@@ -102,7 +315,7 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Users can only update their own profile unless admin
-  if ((req as any).user.role !== USER_ROLES.ADMIN && user._id.toString() !== (req as any).user._id.toString()) {
+  if (req.user?.role !== USER_ROLES.ADMIN && user._id.toString() !== String(req.user?._id)) {
     throw ApiError.forbidden('You can only update your own profile');
   }
 
@@ -132,7 +345,7 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   await user.save();
 
   // Remove sensitive fields
-  const userObj: any = user.toObject();
+  const userObj = user.toObject() as unknown as Record<string, unknown>;
   delete userObj.password;
   delete userObj.refreshTokens;
   delete userObj.passwordResetToken;
@@ -147,6 +360,45 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
  * @access  Private (own profile or Admin)
  */
 export const updateAvatar = asyncHandler(async (req: Request, res: Response) => {
+  if (isSupabaseMode()) {
+    const db = requireSupabaseAdmin();
+    const authUserId = getAuthenticatedUserId(req);
+
+    const { data: existing, error: loadErr } = await db
+      .from('profiles')
+      .select('id,avatar')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
+    if (loadErr) throw ApiError.internal(`Failed to load user: ${loadErr.message}`);
+    if (!existing) throw ApiError.notFound('User not found');
+
+    if (req.user?.role !== USER_ROLES.ADMIN && existing.id !== authUserId) {
+      throw ApiError.forbidden('You can only update your own avatar');
+    }
+
+    if (!req.file) {
+      throw ApiError.badRequest('Please upload an image');
+    }
+
+    // Upload new avatar
+    const result = await uploadService.uploadFile(req.file.path, 'avatars', 'image');
+
+    const { data: updated, error: updateErr } = await db
+      .from('profiles')
+      .update({ avatar: result.url })
+      .eq('id', req.params.id)
+      .select('avatar')
+      .single();
+
+    if (updateErr) throw ApiError.internal(`Failed to update avatar: ${updateErr.message}`);
+
+    const avatarRow = updated as unknown as { avatar?: string | null };
+
+    res.json(ApiResponse.success('Avatar updated successfully', { avatar: avatarRow.avatar }));
+    return;
+  }
+
   const user = await User.findById(req.params.id);
 
   if (!user) {
@@ -154,7 +406,7 @@ export const updateAvatar = asyncHandler(async (req: Request, res: Response) => 
   }
 
   // Users can only update their own avatar unless admin
-  if ((req as any).user.role !== USER_ROLES.ADMIN && user._id.toString() !== (req as any).user._id.toString()) {
+  if (req.user?.role !== USER_ROLES.ADMIN && user._id.toString() !== String(req.user?._id)) {
     throw ApiError.forbidden('You can only update your own avatar');
   }
 
@@ -189,6 +441,10 @@ export const updateAvatar = asyncHandler(async (req: Request, res: Response) => 
  * @access  Private (own profile)
  */
 export const changePassword = asyncHandler(async (req: Request, res: Response) => {
+  if (isSupabaseMode()) {
+    throw ApiError.badRequest('Password is managed by the authentication provider');
+  }
+
   const { currentPassword, newPassword } = req.body;
 
   const user = await User.findById(req.params.id).select('+password');
@@ -198,8 +454,12 @@ export const changePassword = asyncHandler(async (req: Request, res: Response) =
   }
 
   // Users can only change their own password
-  if (user._id.toString() !== (req as any).user._id.toString()) {
+  if (user._id.toString() !== String(req.user?._id)) {
     throw ApiError.forbidden('You can only change your own password');
+  }
+
+  if (!user.password) {
+    throw ApiError.badRequest('Password is managed by the authentication provider');
   }
 
   // Verify current password
@@ -221,6 +481,18 @@ export const changePassword = asyncHandler(async (req: Request, res: Response) =
  * @access  Private (Admin only)
  */
 export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
+  if (isSupabaseMode()) {
+    const db = requireSupabaseAdmin();
+    const { error } = await db
+      .from('profiles')
+      .update({ is_active: false, deleted_at: new Date().toISOString() })
+      .eq('id', req.params.id);
+
+    if (error) throw ApiError.internal(`Failed to deactivate user: ${error.message}`);
+    res.json(ApiResponse.success('User deactivated successfully', null));
+    return;
+  }
+
   const user = await User.findById(req.params.id);
 
   if (!user) {
@@ -240,6 +512,18 @@ export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
  * @access  Private (Admin only)
  */
 export const activateUser = asyncHandler(async (req: Request, res: Response) => {
+  if (isSupabaseMode()) {
+    const db = requireSupabaseAdmin();
+    const { error } = await db
+      .from('profiles')
+      .update({ is_active: true, deleted_at: null })
+      .eq('id', req.params.id);
+
+    if (error) throw ApiError.internal(`Failed to activate user: ${error.message}`);
+    res.json(ApiResponse.success('User activated successfully', null));
+    return;
+  }
+
   const user = await User.findById(req.params.id);
 
   if (!user) {
@@ -258,6 +542,26 @@ export const activateUser = asyncHandler(async (req: Request, res: Response) => 
  * @access  Private (Admin only)
  */
 export const updateUserRole = asyncHandler(async (req: Request, res: Response) => {
+  if (isSupabaseMode()) {
+    const { role } = req.body;
+    const validRoles = Object.values(USER_ROLES);
+    if (!validRoles.includes(role)) {
+      throw ApiError.badRequest('Invalid role');
+    }
+
+    const db = requireSupabaseAdmin();
+    const { data, error } = await db
+      .from('profiles')
+      .update({ role })
+      .eq('id', req.params.id)
+      .select('*')
+      .single();
+
+    if (error) throw ApiError.internal(`Failed to update role: ${error.message}`);
+    res.json(ApiResponse.success('User role updated successfully', data));
+    return;
+  }
+
   const { role } = req.body;
 
   const user = await User.findById(req.params.id);
@@ -284,6 +588,63 @@ export const updateUserRole = asyncHandler(async (req: Request, res: Response) =
  * @access  Private (Admin only)
  */
 export const getUserStats = asyncHandler(async (_req: Request, res: Response) => {
+  if (isSupabaseMode()) {
+    const db = requireSupabaseAdmin();
+    const roles = Object.values(USER_ROLES);
+
+    const byRole = await Promise.all(
+      roles.map(async (r) => {
+        const total = await db.from('profiles').select('id', { head: true, count: 'exact' }).eq('role', r);
+        const active = await db
+          .from('profiles')
+          .select('id', { head: true, count: 'exact' })
+          .eq('role', r)
+          .eq('is_active', true);
+        const inactive = await db
+          .from('profiles')
+          .select('id', { head: true, count: 'exact' })
+          .eq('role', r)
+          .eq('is_active', false);
+
+        if (total.error) throw ApiError.internal(total.error.message);
+        if (active.error) throw ApiError.internal(active.error.message);
+        if (inactive.error) throw ApiError.internal(inactive.error.message);
+
+        return {
+          _id: r,
+          count: total.count || 0,
+          active: active.count || 0,
+          inactive: inactive.count || 0,
+        };
+      })
+    );
+
+    const totalUsersRes = await db.from('profiles').select('id', { head: true, count: 'exact' });
+    const activeUsersRes = await db
+      .from('profiles')
+      .select('id', { head: true, count: 'exact' })
+      .eq('is_active', true);
+
+    if (totalUsersRes.error) throw ApiError.internal(totalUsersRes.error.message);
+    if (activeUsersRes.error) throw ApiError.internal(activeUsersRes.error.message);
+
+    const totalUsers = totalUsersRes.count || 0;
+    const activeUsers = activeUsersRes.count || 0;
+
+    res.json(
+      ApiResponse.success('Data retrieved successfully', {
+        byRole,
+        overall: {
+          total: totalUsers,
+          verified: totalUsers,
+          active: activeUsers,
+          inactive: totalUsers - activeUsers,
+        },
+      })
+    );
+    return;
+  }
+
   const stats = await User.aggregate([
     {
       $group: {
@@ -318,17 +679,64 @@ export const getUserStats = asyncHandler(async (_req: Request, res: Response) =>
  * @access  Private (Lecturer, HOD, Admin)
  */
 export const getStudentsByDepartment = asyncHandler(async (req: Request, res: Response) => {
+  if (isSupabaseMode()) {
+    const { departmentId } = req.params;
+    const { level, page = 1, limit = 50 } = req.query;
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const from = (pageNum - 1) * limitNum;
+    const to = from + limitNum - 1;
+
+    const db = requireSupabaseAdmin();
+    let q = db
+      .from('profiles')
+      .select('id,first_name,last_name,email,student_id,level', { count: 'exact' })
+      .eq('role', USER_ROLES.STUDENT)
+      .eq('department_id', departmentId)
+      .eq('is_active', true)
+      .order('last_name', { ascending: true })
+      .range(from, to);
+
+    if (level) q = q.eq('level', String(level));
+
+    const { data, error, count } = await q;
+    if (error) throw ApiError.internal(`Failed to load students: ${error.message}`);
+
+    res.json(
+      ApiResponse.success('Data retrieved successfully', {
+        students: (data || []).map((row) => {
+          const r = row as unknown as ProfileRow;
+          return {
+            id: r.id,
+            firstName: r.first_name,
+            lastName: r.last_name,
+            email: r.email,
+            studentId: r.student_id,
+            level: r.level,
+          };
+        }),
+        pagination: {
+          total: count || 0,
+          page: pageNum,
+          pages: Math.ceil((count || 0) / limitNum),
+          limit: limitNum,
+        },
+      })
+    );
+    return;
+  }
+
   const { departmentId } = req.params;
   const { level, page = 1, limit = 50 } = req.query;
 
-  const query: any = {
+  const query: FilterQuery<IUser> = {
     role: USER_ROLES.STUDENT,
     department: departmentId,
     isActive: true,
   };
 
   if (level) {
-    query.level = parseInt(level as string);
+    query.level = String(level);
   }
 
   const pageNum = parseInt(page as string);
@@ -338,7 +746,7 @@ export const getStudentsByDepartment = asyncHandler(async (req: Request, res: Re
   const [students, total] = await Promise.all([
     User.find(query)
       .select('firstName lastName email studentId level')
-      .sort({ lastName: 1 })
+      
       .skip(skip)
       .limit(limitNum),
     User.countDocuments(query),
@@ -363,18 +771,61 @@ export const getStudentsByDepartment = asyncHandler(async (req: Request, res: Re
  * @access  Private
  */
 export const searchUsers = asyncHandler(async (req: Request, res: Response) => {
+  if (isSupabaseMode()) {
+    const { q, role, limit = 10 } = req.query;
+    if (!q || String(q).length < 2) {
+      throw ApiError.badRequest('Search query must be at least 2 characters');
+    }
+
+    const db = requireSupabaseAdmin();
+    let query = db
+      .from('profiles')
+      .select('id,first_name,last_name,email,student_id,role,avatar')
+      .eq('is_active', true)
+      .limit(parseInt(String(limit)));
+
+    if (role) query = query.eq('role', String(role));
+
+    const term = String(q);
+    query = query.or(
+      `first_name.ilike.%${term}%,last_name.ilike.%${term}%,email.ilike.%${term}%,student_id.ilike.%${term}%`
+    );
+
+    const { data, error } = await query;
+    if (error) throw ApiError.internal(`Failed to search users: ${error.message}`);
+
+    res.json(
+      ApiResponse.success(
+        'Data retrieved successfully',
+        (data || []).map((row) => {
+          const r = row as unknown as ProfileRow;
+          return {
+            id: r.id,
+            firstName: r.first_name,
+            lastName: r.last_name,
+            email: r.email,
+            studentId: r.student_id,
+            role: r.role,
+            avatar: r.avatar,
+          };
+        })
+      )
+    );
+    return;
+  }
+
   const { q, role, limit = 10 } = req.query;
 
   if (!q || (q as string).length < 2) {
     throw ApiError.badRequest('Search query must be at least 2 characters');
   }
 
-  const query: any = {
+  const query: FilterQuery<IUser> = {
     $or: [
-      { firstName: { $regex: q, $options: 'i' } },
-      { lastName: { $regex: q, $options: 'i' } },
-      { email: { $regex: q, $options: 'i' } },
-      { studentId: { $regex: q, $options: 'i' } },
+      { firstName: { $regex: String(q), $options: 'i' } },
+      { lastName: { $regex: String(q), $options: 'i' } },
+      { email: { $regex: String(q), $options: 'i' } },
+      { studentId: { $regex: String(q), $options: 'i' } },
     ],
     isActive: true,
   };
@@ -396,6 +847,49 @@ export const searchUsers = asyncHandler(async (req: Request, res: Response) => {
  * @access  Private
  */
 export const getMyProfile = asyncHandler(async (req: Request, res: Response) => {
+  if (isSupabaseMode()) {
+    const userId = getAuthenticatedUserId(req);
+    if (!userId) {
+      throw ApiError.unauthorized('Unable to determine authenticated user');
+    }
+
+    const db = requireSupabaseAdmin();
+    const { data, error } = await db
+      .from('profiles')
+      .select('*,departments(name,code,faculty)')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) throw ApiError.internal(`Failed to load profile: ${error.message}`);
+    if (!data) throw ApiError.notFound('User not found');
+
+    const profile = data as unknown as ProfileWithDepartment;
+    res.json(
+      ApiResponse.success('Profile retrieved successfully', {
+        id: profile.id,
+        email: profile.email,
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+        role: profile.role,
+        avatar: profile.avatar,
+        studentId: profile.student_id,
+        department: profile.departments || null,
+        level: profile.level,
+        phoneNumber: profile.phone_number,
+        address: profile.address,
+        dateOfBirth: profile.date_of_birth,
+        nationality: profile.nationality,
+        stateOfOrigin: profile.state_of_origin,
+        bloodGroup: profile.blood_group,
+        emergencyContact: profile.emergency_contact,
+        isActive: profile.is_active,
+        createdAt: profile.created_at,
+        updatedAt: profile.updated_at,
+      })
+    );
+    return;
+  }
+
   const userId = getAuthenticatedUserId(req);
 
   if (!userId) {
@@ -404,7 +898,7 @@ export const getMyProfile = asyncHandler(async (req: Request, res: Response) => 
 
   const user = await User.findById(userId)
     .select('-password -refreshToken -passwordResetToken -emailVerificationToken')
-    .populate('department', 'name code faculty');
+    ;
 
   if (!user) {
     throw ApiError.notFound('User not found');
@@ -419,6 +913,70 @@ export const getMyProfile = asyncHandler(async (req: Request, res: Response) => 
  * @access  Private
  */
 export const updateMyProfile = asyncHandler(async (req: Request, res: Response) => {
+  if (isSupabaseMode()) {
+    const userId = getAuthenticatedUserId(req);
+    if (!userId) {
+      throw ApiError.unauthorized('Unable to determine authenticated user');
+    }
+
+    const {
+      firstName,
+      lastName,
+      phoneNumber,
+      address,
+      dateOfBirth,
+      nationality,
+      stateOfOrigin,
+      bloodGroup,
+      emergencyContact,
+    } = req.body;
+
+    const patch: Partial<ProfileRow> & Record<string, unknown> = {};
+    if (firstName) patch.first_name = firstName;
+    if (lastName) patch.last_name = lastName;
+    if (phoneNumber) patch.phone_number = phoneNumber;
+    if (address) patch.address = address;
+    if (dateOfBirth) patch.date_of_birth = dateOfBirth;
+    if (nationality) patch.nationality = nationality;
+    if (stateOfOrigin) patch.state_of_origin = stateOfOrigin;
+    if (bloodGroup) patch.blood_group = bloodGroup;
+    if (emergencyContact) patch.emergency_contact = emergencyContact;
+
+    const db = requireSupabaseAdmin();
+    const { data, error } = await db
+      .from('profiles')
+      .update(patch)
+      .eq('id', userId)
+      .select('*,departments(name,code,faculty)')
+      .single();
+
+    if (error) throw ApiError.internal(`Failed to update profile: ${error.message}`);
+
+    const profile = data as unknown as ProfileWithDepartment;
+    res.json(
+      ApiResponse.success('Profile updated successfully', {
+        id: profile.id,
+        email: profile.email,
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+        role: profile.role,
+        avatar: profile.avatar,
+        studentId: profile.student_id,
+        department: profile.departments || null,
+        level: profile.level,
+        phoneNumber: profile.phone_number,
+        address: profile.address,
+        dateOfBirth: profile.date_of_birth,
+        nationality: profile.nationality,
+        stateOfOrigin: profile.state_of_origin,
+        bloodGroup: profile.blood_group,
+        emergencyContact: profile.emergency_contact,
+        isActive: profile.is_active,
+      })
+    );
+    return;
+  }
+
   const userId = getAuthenticatedUserId(req);
 
   if (!userId) {
@@ -455,7 +1013,7 @@ export const updateMyProfile = asyncHandler(async (req: Request, res: Response) 
 
   await user.save();
 
-  const userObj: any = user.toObject();
+  const userObj = user.toObject() as unknown as Record<string, unknown>;
   delete userObj.password;
   delete userObj.refreshTokens;
   delete userObj.passwordResetToken;
@@ -470,6 +1028,10 @@ export const updateMyProfile = asyncHandler(async (req: Request, res: Response) 
  * @access  Private
  */
 export const changeMyPassword = asyncHandler(async (req: Request, res: Response) => {
+  if (isSupabaseMode()) {
+    throw ApiError.badRequest('Password is managed by the authentication provider');
+  }
+
   const userId = getAuthenticatedUserId(req);
   const { currentPassword, newPassword } = req.body;
 
@@ -485,6 +1047,10 @@ export const changeMyPassword = asyncHandler(async (req: Request, res: Response)
 
   if (!user) {
     throw ApiError.notFound('User not found');
+  }
+
+  if (!user.password) {
+    throw ApiError.badRequest('Password is managed by the authentication provider');
   }
 
   const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
@@ -504,6 +1070,23 @@ export const changeMyPassword = asyncHandler(async (req: Request, res: Response)
  * @access  Private
  */
 export const deactivateMyAccount = asyncHandler(async (req: Request, res: Response) => {
+  if (isSupabaseMode()) {
+    const userId = getAuthenticatedUserId(req);
+    if (!userId) {
+      throw ApiError.unauthorized('Unable to determine authenticated user');
+    }
+
+    const db = requireSupabaseAdmin();
+    const { error } = await db
+      .from('profiles')
+      .update({ is_active: false, deleted_at: new Date().toISOString() })
+      .eq('id', userId);
+
+    if (error) throw ApiError.internal(`Failed to deactivate account: ${error.message}`);
+    res.json(ApiResponse.success('Account deactivated successfully', null));
+    return;
+  }
+
   const userId = getAuthenticatedUserId(req);
   const { password, reason } = req.body;
 
@@ -519,6 +1102,10 @@ export const deactivateMyAccount = asyncHandler(async (req: Request, res: Respon
 
   if (!user) {
     throw ApiError.notFound('User not found');
+  }
+
+  if (!user.password) {
+    throw ApiError.badRequest('Password is managed by the authentication provider');
   }
 
   const isPasswordValid = await bcrypt.compare(password, user.password);

@@ -1,12 +1,12 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 const rootDir = path.resolve(__dirname, '..');
 const apiDocPath = path.join(rootDir, 'API_DOCUMENTATION.md');
 const routesDir = path.join(rootDir, 'src', 'routes', 'v1');
 const indexPath = path.join(routesDir, 'index.ts');
 
-function normalizePath(routePath) {
+function normalizePath(routePath: string): string {
   if (!routePath) {
     return '/';
   }
@@ -22,17 +22,17 @@ function normalizePath(routePath) {
   return result;
 }
 
-function joinPaths(basePath, relativePath) {
+function joinPaths(basePath: string, relativePath: string): string {
   const base = basePath === '/' ? '' : normalizePath(basePath);
   const relative = relativePath === '/' ? '' : normalizePath(relativePath);
   const combined = `${base}${relative}`;
   return combined ? normalizePath(combined) : '/';
 }
 
-function extractDocumentedEndpoints(docContent) {
-  const documented = new Set();
+function extractDocumentedEndpoints(docContent: string): Set<string> {
+  const documented = new Set<string>();
   const regex = /####\s+(GET|POST|PUT|DELETE|PATCH)\s+([^\s]+)/g;
-  let match;
+  let match: RegExpExecArray | null;
   while ((match = regex.exec(docContent)) !== null) {
     const method = match[1].toUpperCase();
     const endpoint = normalizePath(match[2]);
@@ -41,10 +41,10 @@ function extractDocumentedEndpoints(docContent) {
   return documented;
 }
 
-function getRouteBaseMappings(indexContent) {
+function getRouteBaseMappings(indexContent: string): Map<string, string> {
   const importRegex = /import\s+(\w+)\s+from\s+'\.\/([\w.-]+)';/g;
-  const imports = new Map();
-  let match;
+  const imports = new Map<string, string>();
+  let match: RegExpExecArray | null;
   while ((match = importRegex.exec(indexContent)) !== null) {
     const identifier = match[1];
     const fileName = match[2];
@@ -52,7 +52,7 @@ function getRouteBaseMappings(indexContent) {
   }
 
   const baseRegex = /router\.use\(\s*(['"])([^'"\n]+)\1\s*,\s*(\w+)\s*\)/g;
-  const baseMappings = new Map();
+  const baseMappings = new Map<string, string>();
   while ((match = baseRegex.exec(indexContent)) !== null) {
     const basePath = match[2];
     const identifier = match[3];
@@ -65,8 +65,8 @@ function getRouteBaseMappings(indexContent) {
   return baseMappings;
 }
 
-function extractImplementedEndpoints(baseMappings) {
-  const implemented = new Set();
+function extractImplementedEndpoints(baseMappings: Map<string, string>): Set<string> {
+  const implemented = new Set<string>();
   for (const [fileName, basePath] of baseMappings.entries()) {
     const filePath = path.join(routesDir, `${fileName}.ts`);
     if (!fs.existsSync(filePath)) {
@@ -74,7 +74,7 @@ function extractImplementedEndpoints(baseMappings) {
     }
     const content = fs.readFileSync(filePath, 'utf8');
     const routeRegex = /router\.(get|post|put|delete|patch)\(\s*(["'`])([^"'`]+)\2/gi;
-    let match;
+    let match: RegExpExecArray | null;
     while ((match = routeRegex.exec(content)) !== null) {
       const method = match[1].toUpperCase();
       const relativePath = match[3];
@@ -87,7 +87,7 @@ function extractImplementedEndpoints(baseMappings) {
       const relativePath = match[2];
       const chainBody = match[3];
       const methodRegex = /\.(get|post|put|delete|patch)\s*\(/gi;
-      let methodMatch;
+      let methodMatch: RegExpExecArray | null;
       while ((methodMatch = methodRegex.exec(chainBody)) !== null) {
         const method = methodMatch[1].toUpperCase();
         const fullPath = joinPaths(basePath, relativePath);
@@ -105,7 +105,7 @@ function main() {
   const baseMappings = getRouteBaseMappings(indexContent);
   const implemented = extractImplementedEndpoints(baseMappings);
 
-  const missing = [];
+  const missing: string[] = [];
   for (const endpoint of documented) {
     if (!implemented.has(endpoint)) {
       missing.push(endpoint);
@@ -114,12 +114,17 @@ function main() {
 
   missing.sort();
 
+  // eslint-disable-next-line no-console
   console.log('Documented endpoints:', documented.size);
+  // eslint-disable-next-line no-console
   console.log('Implemented endpoints:', implemented.size);
+  // eslint-disable-next-line no-console
   console.log('Missing endpoints:', missing.length);
   if (missing.length) {
+    // eslint-disable-next-line no-console
     console.log('\nMissing list:');
     for (const ep of missing) {
+      // eslint-disable-next-line no-console
       console.log(`- ${ep}`);
     }
   }

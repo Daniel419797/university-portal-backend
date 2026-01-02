@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
+import { supabaseAdmin } from '../config/supabase';
 import fs from 'fs';
 import crypto from 'crypto';
-import mongoose from 'mongoose';
-import FileAsset from '../models/FileAsset.model';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiError } from '../utils/ApiError';
 import { ApiResponse } from '../utils/ApiResponse';
@@ -11,19 +10,16 @@ import { formatFileSize } from '../utils/helpers';
 const VISIBILITY_VALUES = new Set(['private', 'department', 'public']);
 const ELEVATED_ROLES = new Set(['admin', 'hod', 'bursary']);
 
-const getAuthUserId = (req: Request): mongoose.Types.ObjectId => {
-  const authUser = (req as any).user;
-  const id = authUser?._id || authUser?.userId;
+const getAuthUserId = (req: Request): string => {
+  const authUser = req.user;
+  const id = authUser?.userId;
   if (!id) {
     throw ApiError.unauthorized('User context missing');
   }
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    throw ApiError.badRequest('Invalid user identifier');
-  }
-  return new mongoose.Types.ObjectId(id);
+  return id;
 };
 
-const parseTags = (value: any): string[] => {
+const parseTags = (value: unknown): string[] => {
   if (!value) return [];
   if (Array.isArray(value)) {
     return value.map((tag) => String(tag).trim()).filter(Boolean);
@@ -39,21 +35,21 @@ const parseTags = (value: any): string[] => {
 
 const buildDownloadUrl = (id: string) => `/api/v1/files/${id}?download=true`;
 
-const mapFileAsset = (asset: any) => ({
-  id: asset._id,
-  originalName: asset.originalName,
+const mapFileAsset = (asset: FileAsset) => ({
+  id: asset.id,
+  originalName: asset.original_name,
   filename: asset.filename,
-  mimeType: asset.mimeType,
+  mimeType: asset.mime_type,
   size: asset.size,
   sizeReadable: formatFileSize(asset.size),
   visibility: asset.visibility,
   description: asset.description,
   tags: asset.tags,
   checksum: asset.checksum,
-  uploadedBy: asset.uploadedBy,
-  createdAt: asset.createdAt,
-  updatedAt: asset.updatedAt,
-  downloadUrl: buildDownloadUrl(asset._id.toString()),
+  uploadedBy: asset.uploaded_by,
+  created_at: asset.created_at,
+  updated_at: asset.updated_at,
+  downloadUrl: buildDownloadUrl(asset.id),
 });
 
 const computeChecksum = (filePath: string): Promise<string> => {
@@ -66,19 +62,40 @@ const computeChecksum = (filePath: string): Promise<string> => {
   });
 };
 
-const canAccessAsset = (asset: any, userId: mongoose.Types.ObjectId, role: string) => {
+interface FileAsset {
+  id: string;
+  original_name: string;
+  filename: string;
+  path: string;
+  mime_type: string;
+  size: number;
+  uploaded_by: string;
+  visibility: string;
+  description?: string;
+  tags?: string[];
+  checksum: string;
+  created_at: string;
+  updated_at: string;
+}
+
+const canAccessAsset = (asset: FileAsset | null, userId: string, role: string) => {
   if (!asset) return false;
-  const owner = asset.uploadedBy?.toString() === userId.toString();
+  const owner = asset.uploaded_by === userId;
   if (owner) return true;
   if (ELEVATED_ROLES.has(role)) return true;
   if (asset.visibility === 'public') return true;
   return false;
 };
 
+const getUploadedFile = (req: Request): Express.Multer.File | undefined => {
+  return (req as unknown as { file?: Express.Multer.File }).file;
+};
+
 export const uploadFileAsset = asyncHandler(async (req: Request, res: Response) => {
+  const db = supabaseAdmin();
   const userId = getAuthUserId(req);
-  const role = (req as any).user?.role ?? 'student';
-  const file = (req as any).file as Express.Multer.File | undefined;
+  const role = req.user?.role ?? 'student';
+  const file = getUploadedFile(req);
 
   if (!file) {
     throw ApiError.badRequest('File payload is required');
@@ -96,30 +113,37 @@ export const uploadFileAsset = asyncHandler(async (req: Request, res: Response) 
 
   const checksum = await computeChecksum(file.path);
 
-  const asset = await FileAsset.create({
-    originalName: file.originalname,
+  const { data: asset, error } = await db.from('file_assets').insert({
+    original_name: file.originalname,
     filename: file.filename,
     path: file.path,
-    mimeType: file.mimetype,
+    mime_type: file.mimetype,
     size: file.size,
-    uploadedBy: userId,
+    uploaded_by: userId,
     description,
     tags,
     visibility,
     checksum,
-  });
+  }).select().single();
+
+  if (error || !asset) throw ApiError.internal(`Failed to upload file: ${error?.message}`);
 
   return res.status(201).json(ApiResponse.success('File uploaded successfully', mapFileAsset(asset)));
 });
 
 export const getFileAsset = asyncHandler(async (req: Request, res: Response) => {
+  const db = supabaseAdmin();
   const userId = getAuthUserId(req);
-  const role = (req as any).user?.role ?? 'student';
-  const asset = await FileAsset.findById(req.params.id);
+  const role = req.user?.role ?? 'student';
+  
+  const { data: asset, error } = await db
+    .from('file_assets')
+    .select('*')
+    .eq('id', req.params.id)
+    .maybeSingle();
 
-  if (!asset) {
-    throw ApiError.notFound('File not found');
-  }
+  if (error) throw ApiError.internal(`Failed to retrieve file: ${error.message}`);
+  if (!asset) throw ApiError.notFound('File not found');
 
   if (!canAccessAsset(asset, userId, role)) {
     throw ApiError.forbidden('You do not have access to this file');
@@ -131,22 +155,27 @@ export const getFileAsset = asyncHandler(async (req: Request, res: Response) => 
     if (!fs.existsSync(asset.path)) {
       throw ApiError.notFound('File contents no longer available');
     }
-    return res.download(asset.path, asset.originalName);
+    return res.download(asset.path, asset.original_name);
   }
 
   return res.json(ApiResponse.success('File retrieved successfully', mapFileAsset(asset)));
 });
 
 export const deleteFileAsset = asyncHandler(async (req: Request, res: Response) => {
+  const db = supabaseAdmin();
   const userId = getAuthUserId(req);
-  const role = (req as any).user?.role ?? 'student';
-  const asset = await FileAsset.findById(req.params.id);
+  const role = req.user?.role ?? 'student';
+  
+  const { data: asset, error: fetchError } = await db
+    .from('file_assets')
+    .select('*')
+    .eq('id', req.params.id)
+    .maybeSingle();
 
-  if (!asset) {
-    throw ApiError.notFound('File not found');
-  }
+  if (fetchError) throw ApiError.internal(`Failed to retrieve file: ${fetchError.message}`);
+  if (!asset) throw ApiError.notFound('File not found');
 
-  const isOwner = asset.uploadedBy?.toString() === userId.toString();
+  const isOwner = asset.uploaded_by === userId;
   if (!isOwner && !ELEVATED_ROLES.has(role)) {
     throw ApiError.forbidden('You do not have permission to delete this file');
   }
@@ -159,7 +188,13 @@ export const deleteFileAsset = asyncHandler(async (req: Request, res: Response) 
     }
   }
 
-  await asset.deleteOne();
+  const { error: deleteError } = await db
+    .from('file_assets')
+    .delete()
+    .eq('id', asset.id);
 
-  return res.json(ApiResponse.success('File deleted successfully', { id: asset._id }));
+  if (deleteError) throw ApiError.internal(`Failed to delete file: ${deleteError.message}`);
+
+  return res.json(ApiResponse.success('File deleted successfully', { id: asset.id }));
 });
+
