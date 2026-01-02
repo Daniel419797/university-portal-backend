@@ -4,10 +4,32 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse } from '../utils/ApiResponse';
 
 type CourseRow = { id: string; title: string; code: string; credits?: number; created_at?: string };
-type EnrollmentRow = { id: string; created_at?: string; student?: string; status?: string; course?: CourseRow };
-type AssignmentRow = { id: string; title: string; total_marks?: number; due_date?: string; course?: CourseRow; course_id?: string };
-type SubmissionRow = { id: string; assignment: string; student: string; grade?: number | null };
-type ResultRow = { id: string; grade_points?: number; course?: { id: string; credits?: number } };
+type EnrollmentRow = {
+  id: string;
+  created_at?: string;
+  student?: string;
+  student_id?: string;
+  status?: string;
+  course?: CourseRow;
+  course_id?: string;
+};
+type AssignmentRow = {
+  id: string;
+  title: string;
+  total_marks?: number;
+  due_date?: string;
+  course?: CourseRow;
+  course_id?: string;
+};
+type SubmissionRow = {
+  id?: string;
+  assignment?: string;
+  assignment_id?: string;
+  student?: string;
+  student_id?: string;
+  grade?: number | null;
+};
+type ResultRow = { id: string; grade_points?: number; course?: { id: string; credits?: number }; course_id?: string };
 type ProfileRow = { id: string; first_name: string; last_name: string; email?: string; role?: string; department?: string; is_active?: boolean; created_at?: string };
 type PaymentRow = { id: string; amount: number; status: string; type?: string; created_at?: string; student?: ProfileRow };
 type QuizRow = { id: string; title?: string; course?: string };
@@ -40,15 +62,15 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
     db
       .from('enrollments')
       .select('id', { count: 'exact', head: true })
-      .eq('student', userId)
+      .eq('student_id', userId)
       .eq('status', 'active')
   );
 
   const activeEnrollments = await getRows<EnrollmentRow>(
     db
       .from('enrollments')
-      .select('id, course:course(id,title,code,credits)')
-      .eq('student', userId)
+      .select('id, course:course_id(id,title,code,credits)')
+      .eq('student_id', userId)
       .eq('status', 'active')
   );
 
@@ -59,27 +81,27 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
   const assignments = await getRows<AssignmentRow>(
     db
       .from('assignments')
-      .select('id,title,total_marks,due_date,course:course(id,title,code)')
-      .in('course', courseIds.length ? courseIds : ['__none__'])
+      .select('id,title,total_marks,due_date,course:course_id(id,title,code)')
+      .in('course_id', courseIds.length ? courseIds : ['__none__'])
       .gte('due_date', new Date().toISOString())
   );
 
   const submitted = await getRows<SubmissionRow>(
     db
       .from('submissions')
-      .select('assignment')
-      .eq('student', userId)
-      .in('assignment', assignments.length ? assignments.map(a => a.id) : ['__none__'])
+      .select('assignment_id')
+      .eq('student_id', userId)
+      .in('assignment_id', assignments.length ? assignments.map(a => a.id) : ['__none__'])
   );
-  const submittedAssignmentIds = Array.from(new Set(submitted.map((s) => s.assignment))).filter(Boolean);
+  const submittedAssignmentIds = Array.from(new Set(submitted.map((s) => s.assignment_id))).filter(Boolean);
 
   const pendingAssignments = assignments.filter(a => !submittedAssignmentIds.includes(a.id)).length;
 
   const results = await getRows<ResultRow>(
     db
       .from('results')
-      .select('id, grade_points, course:course(id,credits)')
-      .eq('student', userId)
+      .select('id, grade_points, course:course_id(id,credits)')
+      .eq('student_id', userId)
       .eq('is_published', true)
   );
 
@@ -94,7 +116,7 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
     db
       .from('payments')
       .select('id,status,created_at')
-      .eq('student', userId)
+      .eq('student_id', userId)
       .eq('status', 'verified')
       .order('created_at', { ascending: false })
       .limit(1)
@@ -104,8 +126,8 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
   const recentCourses = await getRows<EnrollmentRow>(
     db
       .from('enrollments')
-      .select('course:course(id,title,code,credits)')
-      .eq('student', userId)
+      .select('course:course_id(id,title,code,credits)')
+      .eq('student_id', userId)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
       .limit(5)
@@ -114,8 +136,8 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
   const recentAssignments = await getRows<AssignmentRow>(
     db
       .from('assignments')
-      .select('id,title,total_marks,due_date,course:course(id,title,code)')
-      .in('course', courseIds.length ? courseIds : ['__none__'])
+      .select('id,title,total_marks,due_date,course:course_id(id,title,code)')
+      .in('course_id', courseIds.length ? courseIds : ['__none__'])
       .order('created_at', { ascending: false })
       .limit(5)
   );
@@ -124,8 +146,8 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
     db
       .from('notifications')
       .select('id', { count: 'exact', head: true })
-      .eq('user', userId)
-      .eq('is_read', false)
+      .eq('user_id', userId)
+      .is('read_at', null)
   );
 
   res.json(
