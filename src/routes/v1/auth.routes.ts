@@ -147,6 +147,10 @@ router.post('/forgot-password', authLimiter, forgotPassword);
  *     responses:
  *       200:
  *         description: Verification email sent successfully
+ *       400:
+ *         description: Email already verified or bad request
+ *       404:
+ *         description: User not found
  */
 router.post('/resend-verification', authLimiter, resendVerificationEmail);
 

@@ -258,19 +258,27 @@ export const resendVerificationEmail = asyncHandler(async (req: Request, res: Re
     }
 
     const anon = supabaseAnon();
-    const { error } = await anon.auth.resend({
+    const { data, error } = await anon.auth.resend({
       type: 'signup',
       email,
     });
 
     if (error) {
       logger.warn(`Supabase resend verification email error: ${error.message}`);
-      // Avoid leaking whether email exists or is already verified
+      // Check specific error types
+      if (error.message.includes('Email not confirmed') || error.message.includes('already confirmed')) {
+        throw ApiError.badRequest('Email is already verified');
+      }
+      if (error.message.includes('User not found') || error.message.includes('not found')) {
+        throw ApiError.notFound('User not found');
+      }
+      // For other errors, return generic message to avoid leaking info
       res.status(200).json(ApiResponse.success('If the email exists and is not verified, a verification link will be sent'));
       return;
     }
 
-    res.status(200).json(ApiResponse.success('Verification email sent successfully'));
+    logger.info(`Verification email resent successfully for: ${email}`);
+    res.status(200).json(ApiResponse.success('Verification email sent successfully. Please check your inbox and spam folder.'));
     return;
   }
 });
