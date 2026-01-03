@@ -1260,6 +1260,22 @@
         "x-source": "auth.routes.ts"
       }
     },
+    "/auth/resend-verification": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Auto-generated for POST /auth/resend-verification",
+        "operationId": "post-auth-resend-verification",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "x-source": "auth.routes.ts"
+      }
+    },
     "/auth/reset-password": {
       "post": {
         "tags": [

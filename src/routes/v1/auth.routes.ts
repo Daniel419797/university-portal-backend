@@ -8,6 +8,7 @@ import {
   forgotPassword,
   resetPassword,
   getCurrentUser,
+  resendVerificationEmail,
 } from '../../controllers/auth.controller';
 import { authenticate } from '../../middleware/auth.middleware';
 import { authLimiter } from '../../middleware/rateLimit.middleware';
@@ -124,6 +125,30 @@ router.post('/verify-email', verifyEmail);
  *         description: Password reset email sent
  */
 router.post('/forgot-password', authLimiter, forgotPassword);
+
+/**
+ * @swagger
+ * /api/v1/auth/resend-verification:
+ *   post:
+ *     tags: [Authentication]
+ *     summary: Resend email verification
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: Verification email sent successfully
+ */
+router.post('/resend-verification', authLimiter, resendVerificationEmail);
 
 /**
  * @swagger

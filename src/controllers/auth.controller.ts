@@ -249,6 +249,32 @@ export const forgotPassword = asyncHandler(async (req: Request, res: Response) =
   }
 });
 
+// Resend verification email
+export const resendVerificationEmail = asyncHandler(async (req: Request, res: Response) => {
+  if (isSupabaseMode()) {
+    const { email } = req.body;
+    if (!email) {
+      throw ApiError.badRequest('Email is required');
+    }
+
+    const anon = supabaseAnon();
+    const { error } = await anon.auth.resend({
+      type: 'signup',
+      email,
+    });
+
+    if (error) {
+      logger.warn(`Supabase resend verification email error: ${error.message}`);
+      // Avoid leaking whether email exists or is already verified
+      res.status(200).json(ApiResponse.success('If the email exists and is not verified, a verification link will be sent'));
+      return;
+    }
+
+    res.status(200).json(ApiResponse.success('Verification email sent successfully'));
+    return;
+  }
+});
+
 // Reset password
 export const resetPassword = asyncHandler(async (_req: Request, _res: Response) => {
   if (isSupabaseMode()) {
