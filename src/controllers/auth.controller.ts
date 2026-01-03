@@ -257,6 +257,26 @@ export const resendVerificationEmail = asyncHandler(async (req: Request, res: Re
       throw ApiError.badRequest('Email is required');
     }
 
+    // First, check if user exists and their verification status
+    const db = supabaseAdmin();
+    const { data: userData, error: userError } = await db.auth.admin.getUserByEmail(email);
+
+    if (userError || !userData?.user) {
+      logger.warn(`User lookup failed for resend verification: ${email}`, { error: userError });
+      // Don't reveal if user exists or not for security
+      res.status(200).json(ApiResponse.success('If the email exists and is not verified, a verification link will be sent'));
+      return;
+    }
+
+    const user = userData.user;
+    const isEmailConfirmed = user.email_confirmed_at !== null;
+
+    if (isEmailConfirmed) {
+      logger.info(`Attempted to resend verification for already verified email: ${email}`);
+      throw ApiError.badRequest('Email is already verified');
+    }
+
+    // User exists and is not verified, proceed with resend
     const anon = supabaseAnon();
     const { error } = await anon.auth.resend({
       type: 'signup',
@@ -264,14 +284,7 @@ export const resendVerificationEmail = asyncHandler(async (req: Request, res: Re
     });
 
     if (error) {
-      logger.warn(`Supabase resend verification email error: ${error.message}`);
-      // Check specific error types
-      if (error.message.includes('Email not confirmed') || error.message.includes('already confirmed')) {
-        throw ApiError.badRequest('Email is already verified');
-      }
-      if (error.message.includes('User not found') || error.message.includes('not found')) {
-        throw ApiError.notFound('User not found');
-      }
+      logger.error(`Supabase resend verification email error for ${email}: ${error.message}`);
       // For other errors, return generic message to avoid leaking info
       res.status(200).json(ApiResponse.success('If the email exists and is not verified, a verification link will be sent'));
       return;
