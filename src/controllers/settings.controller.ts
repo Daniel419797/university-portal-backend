@@ -28,13 +28,16 @@ type Accessibility = { highContrast: boolean; textScale: number };
 interface SettingsRow {
   id: string;
   user_id: string;
-  theme: 'light' | 'dark' | 'system' | string;
-  language?: string | null;
-  timezone?: string | null;
-  notifications?: Notifications | null;
-  privacy?: Privacy | null;
-  accessibility?: Accessibility | null;
-  dashboard_layout?: string[] | null;
+  preferences: {
+    theme?: 'light' | 'dark' | 'system' | string;
+    language?: string | null;
+    timezone?: string | null;
+    notifications?: Notifications | null;
+    accessibility?: Accessibility | null;
+    dashboard_layout?: string[] | null;
+  };
+  privacy: Privacy | null;
+  created_at?: string | null;
   updated_at?: string | null;
 }
 
@@ -51,13 +54,13 @@ const normalizeBoolean = (value: unknown, fallback: boolean): boolean => {
 
 const mapSettingsPayload = (doc: SettingsRow) => ({
   id: doc.id,
-  theme: doc.theme,
-  language: doc.language || null,
-  timezone: doc.timezone || null,
-  notifications: doc.notifications || { email: true, sms: false, push: true },
+  theme: doc.preferences?.theme || 'system',
+  language: doc.preferences?.language || null,
+  timezone: doc.preferences?.timezone || null,
+  notifications: doc.preferences?.notifications || { email: true, sms: false, push: true },
   privacy: doc.privacy || { showProfile: true, showEmail: false, showPhone: false },
-  accessibility: doc.accessibility || { highContrast: false, textScale: 1 },
-  dashboardLayout: (doc.dashboard_layout && doc.dashboard_layout.length > 0) ? doc.dashboard_layout : DEFAULT_LAYOUT,
+  accessibility: doc.preferences?.accessibility || { highContrast: false, textScale: 1 },
+  dashboardLayout: (doc.preferences?.dashboard_layout && doc.preferences.dashboard_layout.length > 0) ? doc.preferences.dashboard_layout : DEFAULT_LAYOUT,
   updated_at: doc.updated_at || null,
 });
 
@@ -77,16 +80,17 @@ export const getUserSettings = asyncHandler(async (req: Request, res: Response) 
 
   if (!existing) {
     const uid = userId as string;
-    const defaults: Omit<SettingsRow, 'id'> = {
+    const defaults = {
       user_id: uid,
-      theme: 'system',
-      language: null,
-      timezone: null,
-      notifications: { email: true, sms: false, push: true },
+      preferences: {
+        theme: 'system',
+        language: null,
+        timezone: null,
+        notifications: { email: true, sms: false, push: true },
+        accessibility: { highContrast: false, textScale: 1 },
+        dashboard_layout: DEFAULT_LAYOUT,
+      },
       privacy: { showProfile: true, showEmail: false, showPhone: false },
-      accessibility: { highContrast: false, textScale: 1 },
-      dashboard_layout: DEFAULT_LAYOUT,
-      updated_at: new Date().toISOString(),
     };
     const { data: created, error: insErr } = await db
       .from('user_settings')
@@ -108,25 +112,36 @@ export const updateUserSettings = asyncHandler(async (req: Request, res: Respons
   const userId = userLike?.userId || userLike?.id;
   const payload = req.body || {};
 
-  const updates: Partial<SettingsRow> = {};
+  const { data: existing, error: fetchErr } = await db
+    .from('user_settings')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (fetchErr) throw ApiError.internal(`Failed to fetch settings: ${fetchErr.message}`);
+
+  const currentPrefs = existing?.preferences || {};
+  const currentPrivacy = existing?.privacy || {};
+
+  const newPrefs = { ...currentPrefs };
+  const newPrivacy = { ...currentPrivacy };
 
   if (payload.theme) {
     if (!allowedThemes.has(payload.theme)) {
       throw ApiError.badRequest('theme must be one of light, dark, or system');
     }
-    updates.theme = payload.theme;
+    newPrefs.theme = payload.theme;
   }
 
-  if (payload.language) {
-    updates.language = String(payload.language);
+  if (payload.language !== undefined) {
+    newPrefs.language = payload.language ? String(payload.language) : null;
   }
 
-  if (payload.timezone) {
-    updates.timezone = String(payload.timezone);
+  if (payload.timezone !== undefined) {
+    newPrefs.timezone = payload.timezone ? String(payload.timezone) : null;
   }
 
   if (payload.notifications) {
-    updates.notifications = {
+    newPrefs.notifications = {
       email: normalizeBoolean(payload.notifications.email, true),
       sms: normalizeBoolean(payload.notifications.sms, false),
       push: normalizeBoolean(payload.notifications.push, true),
@@ -134,11 +149,9 @@ export const updateUserSettings = asyncHandler(async (req: Request, res: Respons
   }
 
   if (payload.privacy) {
-    updates.privacy = {
-      showProfile: normalizeBoolean(payload.privacy.showProfile, true),
-      showEmail: normalizeBoolean(payload.privacy.showEmail, false),
-      showPhone: normalizeBoolean(payload.privacy.showPhone, false),
-    };
+    newPrivacy.showProfile = normalizeBoolean(payload.privacy.showProfile, true);
+    newPrivacy.showEmail = normalizeBoolean(payload.privacy.showEmail, false);
+    newPrivacy.showPhone = normalizeBoolean(payload.privacy.showPhone, false);
   }
 
   if (payload.accessibility) {
@@ -147,7 +160,7 @@ export const updateUserSettings = asyncHandler(async (req: Request, res: Respons
       throw ApiError.badRequest('textScale must be between 0.8 and 1.5');
     }
 
-    updates.accessibility = {
+    newPrefs.accessibility = {
       highContrast: normalizeBoolean(payload.accessibility.highContrast, false),
       textScale: parseFloat(scale.toFixed(2)),
     };
@@ -158,39 +171,41 @@ export const updateUserSettings = asyncHandler(async (req: Request, res: Respons
       throw ApiError.badRequest('dashboardLayout must be an array');
     }
     const items = (payload.dashboardLayout as unknown[]).map((item) => String(item).trim()).filter((item) => item.length > 0);
-    updates.dashboard_layout = items;
+    newPrefs.dashboard_layout = items;
   }
 
-  if (Object.keys(updates).length === 0) {
+  if (Object.keys(newPrefs).length === 0 && Object.keys(newPrivacy).length === 0) {
     throw ApiError.badRequest('No valid settings provided');
   }
 
+  const updates: Partial<SettingsRow> = {};
+  if (Object.keys(newPrefs).length > 0) updates.preferences = newPrefs;
+  if (Object.keys(newPrivacy).length > 0) updates.privacy = newPrivacy;
   updates.updated_at = new Date().toISOString();
-
-  const { data: existing, error: fetchErr } = await db
-    .from('user_settings')
-    .select('*')
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (fetchErr) throw ApiError.internal(`Failed to fetch settings: ${fetchErr.message}`);
 
   if (!existing) {
     const uid = userId as string;
-    const defaults: Omit<SettingsRow, 'id'> = {
+    const defaults = {
       user_id: uid,
-      theme: 'system',
-      language: null,
-      timezone: null,
-      notifications: { email: true, sms: false, push: true },
-      privacy: { showProfile: true, showEmail: false, showPhone: false },
-      accessibility: { highContrast: false, textScale: 1 },
-      dashboard_layout: DEFAULT_LAYOUT,
-      updated_at: updates.updated_at,
+      preferences: {
+        theme: 'system',
+        language: null,
+        timezone: null,
+        notifications: { email: true, sms: false, push: true },
+        accessibility: { highContrast: false, textScale: 1 },
+        dashboard_layout: DEFAULT_LAYOUT,
+        ...newPrefs,
+      },
+      privacy: {
+        showProfile: true,
+        showEmail: false,
+        showPhone: false,
+        ...newPrivacy,
+      },
     };
-    const merged = { ...defaults, ...updates };
     const { data: created, error: insErr } = await db
       .from('user_settings')
-      .insert(merged)
+      .insert(defaults)
       .select()
       .single();
     if (insErr) throw ApiError.internal(`Failed to create settings: ${insErr.message}`);
