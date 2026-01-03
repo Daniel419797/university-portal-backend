@@ -258,7 +258,7 @@ export const resendVerificationEmail = asyncHandler(async (req: Request, res: Re
     }
 
     const anon = supabaseAnon();
-    const { data, error } = await anon.auth.resend({
+    const { error } = await anon.auth.resend({
       type: 'signup',
       email,
     });
