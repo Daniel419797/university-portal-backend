@@ -46,7 +46,7 @@ router.use('/bursary', bursaryRoutes);
 router.use('/admin', adminRoutes);
 router.use('/', settingsRoutes);
 router.use('/', fileRoutes);
-router.use('/', dashboardRoutes);
+router.use('/dashboard', dashboardRoutes);
 router.use('/', webhookRoutes);
 
 export default router;

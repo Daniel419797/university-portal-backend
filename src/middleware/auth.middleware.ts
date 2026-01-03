@@ -106,7 +106,11 @@ export const authenticate = asyncHandler(async (req: Request, _res: Response, ne
       const profile = await ensureSupabaseProfile(userId, email, payload);
       const roleFromProfile = normalizeRole(profile?.role ?? undefined);
       const appMeta = (payload.app_metadata || {}) as Record<string, unknown>;
-      const roleFromToken = normalizeRole(typeof appMeta.role === 'string' ? appMeta.role : undefined);
+      const userMeta = (payload.user_metadata || {}) as Record<string, unknown>;
+      const roleFromToken = normalizeRole(
+        typeof appMeta.role === 'string' ? appMeta.role :
+        typeof userMeta.role === 'string' ? userMeta.role : undefined
+      );
 
       req.user = {
         _id: userId,

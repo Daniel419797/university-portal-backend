@@ -8,6 +8,7 @@ import {
   getLecturerCourseDetail,
   getLecturerCourseStudents,
 } from '../../controllers/lecturer.controller';
+import { getLecturerDashboard } from '../../controllers/dashboard.controller';
 import { authenticate } from '../../middleware/auth.middleware';
 import { authorizeRoles } from '../../middleware/role.middleware';
 import {
@@ -93,5 +94,6 @@ router.get('/students', getLecturerStudents);
 router.get('/students/:id', getLecturerStudentProfile);
 router.post('/results/import', importLecturerResults);
 router.get('/analytics', getLecturerAnalytics);
+router.get('/dashboard', getLecturerDashboard);
 
 export default router;
