@@ -44,6 +44,9 @@ interface ResultRow {
   courses?: CourseRow;
   sessions?: SessionRow;
 }
+
+// Lightweight user shape for ID resolution
+type UserLike = { userId?: string; _id?: string | { toString(): string }; id?: string; role?: string };
 const resolveUserId = (reqUser: UserLike | undefined): string | undefined => {
   if (!reqUser) return undefined;
   return reqUser.userId || reqUser._id?.toString() || reqUser.id;
