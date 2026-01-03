@@ -97,8 +97,6 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     }
 
     const anon = supabaseAnon();
-    const redirectBase = process.env.CLIENT_URL || process.env.SITE_URL || '';
-    const emailRedirectTo = redirectBase ? `${redirectBase.replace(/\/+$/, '')}/verify-email` : undefined;
     const { data, error } = await anon.auth.signUp({
       email,
       password,
@@ -108,7 +106,6 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
           last_name: lastName,
           role,
         },
-        emailRedirectTo,
       },
     });
 
@@ -239,80 +236,6 @@ export const forgotPassword = asyncHandler(async (req: Request, res: Response) =
     }
 
     res.status(200).json(ApiResponse.success('If the email exists, a password reset link will be sent'));
-    return;
-  }
-});
-
-// Resend verification email
-export const resendVerificationEmail = asyncHandler(async (req: Request, res: Response) => {
-  if (isSupabaseMode()) {
-    const { email } = req.body;
-    if (!email) {
-      throw ApiError.badRequest('Email is required');
-    }
-
-    // First check if user exists and their verification status
-    const db = supabaseAdmin();
-    try {
-      const { data: userData, error: userError } = await db.auth.admin.getUserByEmail(email);
-
-      if (userError) {
-        logger.warn(`User lookup failed for resend verification: ${email}`, { error: userError });
-        res.status(200).json(ApiResponse.success('If the email exists and is not verified, a verification link will be sent'));
-        return;
-      }
-
-      if (!userData?.user) {
-        logger.warn(`User not found for resend verification: ${email}`);
-        res.status(200).json(ApiResponse.success('If the email exists and is not verified, a verification link will be sent'));
-        return;
-      }
-
-      const user = userData.user;
-      const isEmailConfirmed = user.email_confirmed_at !== null;
-
-      if (isEmailConfirmed) {
-        logger.info(`Attempted to resend verification for already verified email: ${email}`);
-        throw ApiError.badRequest('Email is already verified');
-      }
-
-      logger.info(`Attempting to resend verification email for: ${email}`);
-    } catch (adminError) {
-      logger.error(`Admin API error during resend verification for ${email}:`, adminError);
-      // Continue with resend attempt even if admin check fails
-    }
-
-    const anon = supabaseAnon();
-    const { data, error } = await anon.auth.resend({
-      type: 'signup',
-      email,
-    });
-
-    if (error) {
-      logger.error(`Supabase resend verification email error for ${email}:`, {
-        message: error.message,
-        status: error.status,
-        details: error
-      });
-
-      // Check specific error types
-      if (error.message.includes('Email not confirmed') || error.message.includes('already confirmed')) {
-        throw ApiError.badRequest('Email is already verified');
-      }
-      if (error.message.includes('User not found') || error.message.includes('not found')) {
-        throw ApiError.notFound('User not found');
-      }
-      if (error.message.includes('rate limit') || error.message.includes('too many')) {
-        throw ApiError.tooManyRequests('Too many requests. Please try again later.');
-      }
-
-      // For other errors, return generic message to avoid leaking info
-      res.status(200).json(ApiResponse.success('If the email exists and is not verified, a verification link will be sent'));
-      return;
-    }
-
-    logger.info(`Supabase resend API call successful for ${email}. Response:`, data);
-    res.status(200).json(ApiResponse.success('Verification email sent successfully. Please check your inbox and spam folder.'));
     return;
   }
 });
