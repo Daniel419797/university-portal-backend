@@ -35,7 +35,7 @@ interface ResultRow {
   entered_by: string;
   approved_by_hod: boolean;
   approved_by_admin: boolean;
-  is_published: boolean;
+  status?: string;
   hod_approved_by?: string | null;
   hod_approved_at?: string | null;
   admin_approved_by?: string | null;
@@ -44,8 +44,6 @@ interface ResultRow {
   courses?: CourseRow;
   sessions?: SessionRow;
 }
-
-type UserLike = { userId?: string; _id?: string; id?: string; role?: string };
 const resolveUserId = (reqUser: UserLike | undefined): string | undefined => {
   if (!reqUser) return undefined;
   return reqUser.userId || reqUser._id?.toString() || reqUser.id;
@@ -70,7 +68,9 @@ const buildTranscriptPayload = async (requester: UserLike | undefined, studentId
     .from('results')
     .select('*, courses:courses(credits, name), sessions:sessions(name)')
     .eq('student_id', studentId)
-    .eq('is_published', true);
+    .eq('approved_by_hod', true)
+    .eq('approved_by_admin', true)
+    .eq('status', 'approved');
   if (resErr) throw ApiError.internal(`Failed to fetch results: ${resErr.message}`);
 
   const grouped: Record<string, { session: string; semester: string; results: ResultRow[]; gpa?: number }> = {};
@@ -155,7 +155,7 @@ export const createResult = asyncHandler(async (req: Request, res: Response) => 
       entered_by: userId,
       approved_by_hod: false,
       approved_by_admin: false,
-      is_published: false,
+      status: 'pending',
     })
     .select()
     .single();
@@ -165,7 +165,7 @@ export const createResult = asyncHandler(async (req: Request, res: Response) => 
 
 export const getResults = asyncHandler(async (req: Request, res: Response) => {
   const db = supabaseAdmin();
-  const { student, course, session, semester, published, page = 1, limit = 20 } = req.query;
+  const { student, course, session, semester, published, page = 1, limit = 20, status } = req.query;
   if (!req.user) throw ApiError.unauthorized('User not authenticated');
 
   const pageNum = parseInt(page as string) || 1;
@@ -174,10 +174,15 @@ export const getResults = asyncHandler(async (req: Request, res: Response) => {
 
   let query = db.from('results').select('*', { count: 'exact' });
   if (req.user.role === USER_ROLES.STUDENT) {
-    query = query.eq('student_id', resolveUserId(req.user) as string).eq('is_published', true);
+    query = query
+      .eq('student_id', resolveUserId(req.user) as string)
+      .eq('approved_by_hod', true)
+      .eq('approved_by_admin', true)
+      .eq('status', 'approved');
   } else {
     if (student) query = query.eq('student_id', student as string);
-    if (published !== undefined) query = query.eq('is_published', String(published) === 'true');
+    if (published !== undefined) query = query.eq('status', String(published) === 'true' ? 'approved' : 'pending');
+    if (status) query = query.eq('status', status as string);
   }
   if (course) query = query.eq('course_id', course as string);
   if (session) query = query.eq('session_id', session as string);
@@ -197,7 +202,11 @@ export const getResultById = asyncHandler(async (req: Request, res: Response) =>
   const { data: result, error } = await db.from('results').select('*').eq('id', id).maybeSingle();
   if (error) throw ApiError.internal(`Failed to fetch result: ${error.message}`);
   if (!result) throw ApiError.notFound('Result not found');
-  if (req.user && req.user.role === USER_ROLES.STUDENT && (result.student_id !== resolveUserId(req.user) || !result.is_published))
+  if (
+    req.user &&
+    req.user.role === USER_ROLES.STUDENT &&
+    (result.student_id !== resolveUserId(req.user) || result.status !== 'approved' || !result.approved_by_hod || !result.approved_by_admin)
+  )
     throw ApiError.forbidden('You are not authorized to view this result');
   res.json(ApiResponse.success('Data retrieved successfully', result));
 });
@@ -244,12 +253,12 @@ export const deleteResult = asyncHandler(async (req: Request, res: Response) => 
 
   const { data: result, error: fetchErr } = await db
     .from('results')
-    .select('id, entered_by, is_published')
+    .select('id, entered_by, status')
     .eq('id', id)
     .maybeSingle();
   if (fetchErr) throw ApiError.internal(`Failed to fetch result: ${fetchErr.message}`);
   if (!result) throw ApiError.notFound('Result not found');
-  if (result.is_published) throw ApiError.badRequest('Cannot delete published results');
+  if (result.status === 'approved') throw ApiError.badRequest('Cannot delete approved/published results');
   if (req.user!.role !== USER_ROLES.ADMIN && result.entered_by !== userId)
     throw ApiError.forbidden('You are not authorized to delete this result');
 
@@ -316,17 +325,17 @@ export const publishResults = asyncHandler(async (req: Request, res: Response) =
     .eq('semester', semester)
     .eq('approved_by_hod', true)
     .eq('approved_by_admin', true)
-    .eq('is_published', false);
+    .eq('status', 'pending');
   if (countErr) throw ApiError.internal(`Failed to count results: ${countErr.message}`);
 
   const { error: pubErr } = await db
     .from('results')
-    .update({ is_published: true, published_at: new Date().toISOString() })
+    .update({ status: 'approved', published_at: new Date().toISOString() })
     .eq('session_id', session)
     .eq('semester', semester)
     .eq('approved_by_hod', true)
     .eq('approved_by_admin', true)
-    .eq('is_published', false);
+    .eq('status', 'pending');
   if (pubErr) throw ApiError.internal(`Failed to publish results: ${pubErr.message}`);
 
   const { data: rows, error: selErr } = await db
@@ -334,7 +343,7 @@ export const publishResults = asyncHandler(async (req: Request, res: Response) =
     .select('student_id')
     .eq('session_id', session)
     .eq('semester', semester)
-    .eq('is_published', true);
+    .eq('status', 'approved');
   if (selErr) throw ApiError.internal(`Failed to fetch published results: ${selErr.message}`);
   const studentIds = Array.from(new Set((rows || []).map((r) => r.student_id)));
   if (studentIds.length > 0) {
@@ -366,7 +375,13 @@ export const getResultsSummary = asyncHandler(async (req: Request, res: Response
   if (req.user.role === USER_ROLES.STUDENT && resolveUserId(req.user) !== studentId)
     throw ApiError.forbidden('You can only access your own results');
 
-  let query = db.from('results').select('*, courses:courses(credits)').eq('student_id', studentId).eq('is_published', true);
+  let query = db
+    .from('results')
+    .select('*, courses:courses(credits)')
+    .eq('student_id', studentId)
+    .eq('approved_by_hod', true)
+    .eq('approved_by_admin', true)
+    .eq('status', 'approved');
   if (session) query = query.eq('session_id', session as string);
   if (semester) query = query.eq('semester', semester as string);
 

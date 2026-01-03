@@ -185,7 +185,7 @@ export const getStudentIdCard = asyncHandler(async (req: Request, res: Response)
     .from('profiles')
     .select(
       `id, role, student_id, first_name, last_name, level, avatar,
-       department:departments(id, name, code, faculty)`
+       department:departments!profiles_department_fk(id, name, code, faculty)`
     )
     .eq('id', studentId)
     .maybeSingle();

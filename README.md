@@ -117,15 +117,19 @@ NODE_ENV=development
 PORT=5000
 CLIENT_URL=http://localhost:3000
 
-# Auth
-# local: backend-managed JWT + Mongo passwords
+# Auth (Supabase recommended)
 # supabase: Supabase manages email verification + password reset; backend verifies Supabase JWTs
-AUTH_STRATEGY=local
+# local: legacy (Mongo) [deprecated]
+AUTH_STRATEGY=supabase
 SUPABASE_URL=https://<your-project-ref>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<your-supabase-service-role-key>
+SUPABASE_ANON_KEY=<your-supabase-anon-key>
 SUPABASE_JWT_AUDIENCE=authenticated
+# SUPABASE_JWT_ISSUER=https://<your-project-ref>.supabase.co/auth/v1
+# SUPABASE_JWKS_URL=https://<your-project-ref>.supabase.co/auth/v1/.well-known/jwks.json
 
 # Database
-MONGODB_URI=mongodb://localhost:27017/university_portal
+# Using Supabase Postgres; no MongoDB URI required
 
 # JWT
 JWT_ACCESS_SECRET=your_super_secret_access_key
