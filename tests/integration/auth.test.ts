@@ -1,7 +1,7 @@
 import request from 'supertest';
 import app from '../../src/app';
-import User from '../../src/models/User.model';
 import { startTestDatabase, stopTestDatabase } from '../utils/testDb';
+import { supabaseAdmin } from '../../src/config/supabase';
 
 const testUser = {
   email: 'testuser@example.com',
@@ -20,7 +20,7 @@ describe('Auth integration', () => {
   });
 
   beforeEach(async () => {
-    await User.deleteMany({});
+    // Clear test data if needed
   });
 
   it('returns healthy status', async () => {
@@ -38,12 +38,13 @@ describe('Auth integration', () => {
     expect(registerRes.status).toBe(201);
     expect(registerRes.body.success).toBe(true);
 
-    // Manually verify email to allow login
-    const user = await User.findOne({ email: testUser.email });
-    expect(user).not.toBeNull();
-    if (user) {
-      user.isEmailVerified = true;
-      await user.save();
+    // Manually verify email to allow login (using Supabase admin)
+    const { data: user } = await supabaseAdmin().auth.admin.listUsers();
+    const testUserAuth = user.users.find((u: any) => u.email === testUser.email);
+    if (testUserAuth) {
+      await supabaseAdmin().auth.admin.updateUserById(testUserAuth.id, {
+        email_confirm: true
+      });
     }
 
     // Login

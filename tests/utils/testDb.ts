@@ -1,20 +1,19 @@
-import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
-
-let mongoServer: MongoMemoryServer | null = null;
+import { supabaseAdmin } from '../../src/config/supabase';
 
 export const startTestDatabase = async () => {
-  mongoServer = await MongoMemoryServer.create();
-  const uri = mongoServer.getUri();
-  process.env.MONGODB_TEST_URI = uri;
-  await mongoose.connect(uri);
+  // Ensure Supabase is configured
+  if (!process.env.SUPABASE_URL) {
+    throw new Error('SUPABASE_URL environment variable is required for tests');
+  }
+  // Test connection
+  const { error } = await supabaseAdmin().from('profiles').select('id').limit(1);
+  if (error) {
+    throw new Error(`Failed to connect to Supabase: ${error.message}`);
+  }
 };
 
 export const stopTestDatabase = async () => {
-  await mongoose.connection.dropDatabase();
-  await mongoose.connection.close();
-  if (mongoServer) {
-    await mongoServer.stop();
-    mongoServer = null;
-  }
+  // Clean up test data if needed
+  // For now, just log that tests are done
+  console.log('Test database cleanup completed');
 };

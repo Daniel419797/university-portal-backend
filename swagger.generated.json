@@ -141,6 +141,42 @@
           },
           "avatar": {
             "type": "string"
+          },
+          "phoneNumber": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "format": "date"
+          },
+          "nationality": {
+            "type": "string"
+          },
+          "stateOfOrigin": {
+            "type": "string"
+          },
+          "bloodGroup": {
+            "type": "string"
+          },
+          "emergencyContact": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "relationship": {
+                "type": "string"
+              },
+              "phone": {
+                "type": "string"
+              }
+            }
+          },
+          "bio": {
+            "type": "string"
           }
         },
         "required": [
@@ -655,12 +691,45 @@
           "lastName": {
             "type": "string"
           },
-          "phone": {
+          "phoneNumber": {
             "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "format": "date"
+          },
+          "nationality": {
+            "type": "string"
+          },
+          "stateOfOrigin": {
+            "type": "string"
+          },
+          "bloodGroup": {
+            "type": "string"
+          },
+          "emergencyContact": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "relationship": {
+                "type": "string"
+              },
+              "phone": {
+                "type": "string"
+              }
+            }
           },
           "avatar": {
             "type": "string",
             "description": "Base64 or URL"
+          },
+          "bio": {
+            "type": "string"
           }
         }
       },

@@ -54,6 +54,7 @@ create table if not exists public.profiles (
   state_of_origin text,
   blood_group text,
   emergency_contact jsonb,
+  bio text,
   is_active boolean not null default true,
   two_factor_method text,
   two_factor_secret text,

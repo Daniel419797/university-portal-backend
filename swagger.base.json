@@ -76,7 +76,22 @@
           "department": { "type": "string" },
           "level": { "type": "string" },
           "matricNumber": { "type": "string" },
-          "avatar": { "type": "string" }
+          "avatar": { "type": "string" },
+          "phoneNumber": { "type": "string" },
+          "address": { "type": "string" },
+          "dateOfBirth": { "type": "string", "format": "date" },
+          "nationality": { "type": "string" },
+          "stateOfOrigin": { "type": "string" },
+          "bloodGroup": { "type": "string" },
+          "emergencyContact": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "relationship": { "type": "string" },
+              "phone": { "type": "string" }
+            }
+          },
+          "bio": { "type": "string" }
         },
         "required": ["id", "email", "firstName", "lastName", "role"]
       },
@@ -303,8 +318,22 @@
         "properties": {
           "firstName": { "type": "string" },
           "lastName": { "type": "string" },
-          "phone": { "type": "string" },
-          "avatar": { "type": "string", "description": "Base64 or URL" }
+          "phoneNumber": { "type": "string" },
+          "address": { "type": "string" },
+          "dateOfBirth": { "type": "string", "format": "date" },
+          "nationality": { "type": "string" },
+          "stateOfOrigin": { "type": "string" },
+          "bloodGroup": { "type": "string" },
+          "emergencyContact": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "relationship": { "type": "string" },
+              "phone": { "type": "string" }
+            }
+          },
+          "avatar": { "type": "string", "description": "Base64 or URL" },
+          "bio": { "type": "string" }
         }
       },
       "ChangePasswordRequest": {

@@ -41,3 +41,30 @@ export interface EmailOptions {
   html: string;
   attachments?: any[];
 }
+
+export interface UpdateProfileRequest {
+  // Basic Information
+  firstName?: string;
+  lastName?: string;
+  
+  // Contact Information
+  phoneNumber?: string;
+  address?: string;
+  
+  // Personal Information
+  dateOfBirth?: string; // ISO date string
+  nationality?: string;
+  stateOfOrigin?: string;
+  bloodGroup?: string;
+  
+  // Emergency Contact (as nested object)
+  emergencyContact?: {
+    name?: string;
+    relationship?: string;
+    phone?: string;
+  };
+  
+  // Profile
+  avatar?: string;
+  bio?: string; // If the API supports it
+}

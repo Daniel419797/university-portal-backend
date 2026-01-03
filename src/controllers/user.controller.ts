@@ -24,6 +24,7 @@ type ProfileRow = {
   state_of_origin?: string | null;
   blood_group?: string | null;
   emergency_contact?: unknown;
+  bio?: string | null;
   is_active?: boolean | null;
   deleted_at?: string | null;
   created_at?: string | null;
@@ -153,6 +154,14 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
       studentId: profile.student_id,
       department: profile.departments || null,
       level: profile.level,
+      phoneNumber: profile.phone_number,
+      address: profile.address,
+      dateOfBirth: profile.date_of_birth,
+      nationality: profile.nationality,
+      stateOfOrigin: profile.state_of_origin,
+      bloodGroup: profile.blood_group,
+      emergencyContact: profile.emergency_contact,
+      bio: profile.bio,
       isActive: profile.is_active,
       deletedAt: profile.deleted_at,
       createdAt: profile.created_at,
@@ -193,6 +202,8 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
     stateOfOrigin,
     bloodGroup,
     emergencyContact,
+    avatar,
+    bio,
   } = req.body;
 
   const patch: Partial<ProfileRow> & Record<string, unknown> = {};
@@ -205,6 +216,8 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   if (stateOfOrigin) patch.state_of_origin = stateOfOrigin;
   if (bloodGroup) patch.blood_group = bloodGroup;
   if (emergencyContact) patch.emergency_contact = emergencyContact;
+  if (avatar) patch.avatar = avatar;
+  if (bio) patch.bio = bio;
 
   const { data: updated, error: updateErr } = await db
     .from('profiles')
