@@ -1228,22 +1228,6 @@
         "x-source": "auth.routes.ts"
       }
     },
-    "/auth/verify-email": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "summary": "Auto-generated for POST /auth/verify-email",
-        "operationId": "post-auth-verify-email",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Success"
-          }
-        },
-        "x-source": "auth.routes.ts"
-      }
-    },
     "/auth/forgot-password": {
       "post": {
         "tags": [

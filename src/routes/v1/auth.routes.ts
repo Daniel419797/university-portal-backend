@@ -4,7 +4,6 @@ import {
   login,
   logout,
   refreshAccessToken,
-  verifyEmail,
   forgotPassword,
   resetPassword,
   getCurrentUser,
@@ -101,18 +100,6 @@ router.post('/logout', logout);
  *         description: Token refreshed successfully
  */
 router.post('/refresh-token', refreshAccessToken);
-
-/**
- * @swagger
- * /api/v1/auth/verify-email:
- *   post:
- *     tags: [Authentication]
- *     summary: Verify email with token
- *     responses:
- *       200:
- *         description: Email verified successfully
- */
-router.post('/verify-email', verifyEmail);
 
 /**
  * @swagger

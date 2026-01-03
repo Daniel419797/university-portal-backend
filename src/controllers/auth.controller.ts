@@ -217,13 +217,6 @@ export const refreshAccessToken = asyncHandler(async (req: Request, res: Respons
   }
 });
 
-// Verify email
-export const verifyEmail = asyncHandler(async (_req: Request, _res: Response) => {
-  if (isSupabaseMode()) {
-    throw ApiError.badRequest('Email verification is handled by Supabase. Use the verification link in the email.');
-  }
-});
-
 // Forgot password
 export const forgotPassword = asyncHandler(async (req: Request, res: Response) => {
   if (isSupabaseMode()) {
