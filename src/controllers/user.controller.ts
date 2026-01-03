@@ -241,6 +241,14 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
       studentId: updatedProfile.student_id,
       departmentId: updatedProfile.department_id,
       level: updatedProfile.level,
+      phoneNumber: updatedProfile.phone_number,
+      address: updatedProfile.address,
+      dateOfBirth: updatedProfile.date_of_birth,
+      nationality: updatedProfile.nationality,
+      stateOfOrigin: updatedProfile.state_of_origin,
+      bloodGroup: updatedProfile.blood_group,
+      emergencyContact: updatedProfile.emergency_contact,
+      bio: updatedProfile.bio,
       isActive: updatedProfile.is_active,
     })
   );
