@@ -66,6 +66,7 @@ async function ensureSupabaseProfile(userId: string, email: string, payload?: Su
     safeString(meta.last_name) ||
     safeString(meta.family_name) ||
     fromEmail.lastName;
+  const role = normalizeRole(meta.role as string) || 'student';
 
   const inserted = await db
     .from('profiles')
@@ -74,7 +75,7 @@ async function ensureSupabaseProfile(userId: string, email: string, payload?: Su
       email,
       first_name: firstName,
       last_name: lastName,
-      role: 'student',
+      role,
       is_active: true,
     })
     .select('*')
