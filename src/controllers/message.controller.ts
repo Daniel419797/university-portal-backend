@@ -24,13 +24,11 @@ import notificationService from '../services/notification.service';
 interface MessageRow {
   id: string;
   sender_id: string;
-  recipient_id: string;
-  subject: string;
-  body: string;
+  receiver_id: string;
+  content: string;
   attachments: unknown[] | null;
-  is_read: boolean;
   read_at: string | null;
-  thread_id: string | null;
+  deleted_at?: string | null;
   created_at: string;
 }
 
@@ -58,7 +56,7 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
 
   let query = db.from('messages').select('*', { count: 'exact' });
   if (type === 'inbox') {
-    query = query.eq('recipient_id', userId);
+    query = query.eq('receiver_id', userId);
   } else if (type === 'sent') {
     query = query.eq('sender_id', userId);
   } else {
@@ -71,9 +69,15 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
 
   if (error) throw ApiError.internal(`Failed to fetch messages: ${error.message}`);
 
+  const deriveSubject = (content: string | null | undefined) => {
+    if (!content) return '';
+    const firstLine = content.split('\n')[0];
+    return firstLine.trim();
+  };
+
   const items = (data || []) as MessageRow[];
   const senderIds = items.map((m) => m.sender_id);
-  const recipientIds = items.map((m) => m.recipient_id);
+  const recipientIds = items.map((m) => m.receiver_id);
   const profileIds = Array.from(new Set([...senderIds, ...recipientIds]));
 
   let profilesMap = new Map<string, ProfileRow>();
@@ -89,8 +93,8 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
   const { count: unreadCount } = await db
     .from('messages')
     .select('id', { count: 'exact', head: true })
-    .eq('recipient_id', userId)
-    .eq('is_read', false);
+    .eq('receiver_id', userId)
+    .is('read_at', null);
 
   res.json(
     ApiResponse.success('Messages fetched successfully', {
@@ -103,17 +107,17 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
             : { id: m.sender_id, name: undefined, email: undefined, avatar: undefined };
         })(),
         recipient: (() => {
-          const rp = profilesMap.get(m.recipient_id);
+          const rp = profilesMap.get(m.receiver_id);
           return rp
             ? { id: rp.id, name: `${rp.first_name} ${rp.last_name}`, email: rp.email, avatar: rp.avatar }
-            : { id: m.recipient_id, name: undefined, email: undefined, avatar: undefined };
+            : { id: m.receiver_id, name: undefined, email: undefined, avatar: undefined };
         })(),
-        subject: m.subject,
-        body: m.body,
+        subject: deriveSubject(m.content),
+        body: m.content,
         attachments: m.attachments || [],
-        isRead: m.is_read,
+        isRead: Boolean(m.read_at),
         readAt: m.read_at,
-        thread: m.thread_id,
+        thread: undefined,
         created_at: m.created_at,
       })),
       pagination: {
@@ -148,49 +152,30 @@ export const getMessageThread = asyncHandler(async (req: Request, res: Response)
   if (!message) throw ApiError.notFound('Message not found');
 
   // Check authorization
-  if (message.sender_id !== userId && message.recipient_id !== userId) {
+  if (message.sender_id !== userId && message.receiver_id !== userId) {
     throw ApiError.forbidden('Not authorized to view this message');
   }
 
   // Mark as read if user is recipient and message is unread
-  if (message.recipient_id === userId && !message.is_read) {
+  if (message.receiver_id === userId && !message.read_at) {
     const { error: updateError } = await db
       .from('messages')
-      .update({ is_read: true, read_at: new Date().toISOString() })
+      .update({ read_at: new Date().toISOString() })
       .eq('id', id);
     if (updateError) throw ApiError.internal(`Failed to mark message as read: ${updateError.message}`);
-    message.is_read = true;
     message.read_at = new Date().toISOString();
   }
 
-  // Get thread messages
-  let threadMessages: MessageRow[] = [];
-  if (message.thread_id) {
-    const threadId = message.thread_id;
-    const { data: tData, error: tErr } = await db
-      .from('messages')
-      .select('*')
-      .or(`id.eq.${threadId},thread_id.eq.${threadId},thread_id.eq.${message.id}`)
-      .order('created_at', { ascending: true });
-    if (tErr) throw ApiError.internal(`Failed to fetch thread: ${tErr.message}`);
-    threadMessages = (tData || []) as MessageRow[];
-  } else {
-    const { data: replies, error: rErr } = await db
-      .from('messages')
-      .select('*')
-      .eq('thread_id', message.id)
-      .order('created_at', { ascending: true });
-    if (rErr) throw ApiError.internal(`Failed to fetch replies: ${rErr.message}`);
-    threadMessages = (replies || []) as MessageRow[];
-  }
+  // Threading is not supported in current schema; only return the single message
+  const threadMessages: MessageRow[] = [];
 
   // Profiles for mapping
   const ids = Array.from(
     new Set([
       message.sender_id,
-      message.recipient_id,
+      message.receiver_id,
       ...threadMessages.map((m) => m.sender_id),
-      ...threadMessages.map((m) => m.recipient_id),
+      ...threadMessages.map((m) => m.receiver_id),
     ])
   );
   let profilesMap = new Map<string, ProfileRow>();
@@ -205,7 +190,8 @@ export const getMessageThread = asyncHandler(async (req: Request, res: Response)
 
   const formatMessage = (m: MessageRow) => {
     const sp = profilesMap.get(m.sender_id);
-    const rp = profilesMap.get(m.recipient_id);
+    const rp = profilesMap.get(m.receiver_id);
+    const subject = m.content ? m.content.split('\n')[0].trim() : '';
     return {
       id: m.id,
       sender: sp
@@ -213,11 +199,11 @@ export const getMessageThread = asyncHandler(async (req: Request, res: Response)
         : { id: m.sender_id, name: undefined, email: undefined, avatar: undefined },
       recipient: rp
         ? { id: rp.id, name: `${rp.first_name} ${rp.last_name}`, email: rp.email, avatar: rp.avatar }
-        : { id: m.recipient_id, name: undefined, email: undefined, avatar: undefined },
-      subject: m.subject,
-      body: m.body,
+        : { id: m.receiver_id, name: undefined, email: undefined, avatar: undefined },
+      subject,
+      body: m.content,
       attachments: m.attachments || [],
-      isRead: m.is_read,
+      isRead: Boolean(m.read_at),
       readAt: m.read_at,
       created_at: m.created_at,
     };
@@ -237,17 +223,15 @@ export const getMessageThread = asyncHandler(async (req: Request, res: Response)
 export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
   const db = supabaseAdmin();
   const userId = req.user?.userId || req.user?._id?.toString();
-  const { recipientId, subject, body, attachments, threadId } = req.body as {
+  const { recipientId, subject, body, attachments } = req.body as {
     recipientId: string;
-    subject: string;
+    subject?: string;
     body: string;
     attachments?: unknown[];
-    threadId?: string;
   };
 
   if (!userId) throw ApiError.unauthorized('User not authenticated');
   if (!recipientId) throw ApiError.badRequest('recipientId is required');
-  if (!subject) throw ApiError.badRequest('subject is required');
   if (!body) throw ApiError.badRequest('body is required');
 
   // Validate recipient exists
@@ -264,12 +248,9 @@ export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
     .from('messages')
     .insert({
       sender_id: userId,
-      recipient_id: recipientId,
-      subject,
-      body,
+      receiver_id: recipientId,
+      content: subject ? `${subject}\n\n${body}` : body,
       attachments: attachments || [],
-      thread_id: threadId || null,
-      is_read: false,
     })
     .select()
     .single();
@@ -297,8 +278,8 @@ export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
       id: message.id,
       sender: { id: userId, name: senderName },
       recipient: { id: recipient.id, name: `${recipient.first_name} ${recipient.last_name}`, email: recipient.email, avatar: recipient.avatar },
-      subject: message.subject,
-      body: message.body,
+      subject: subject || (body ? body.split('\n')[0].trim() : ''),
+      body: message.content,
       attachments: message.attachments || [],
       created_at: message.created_at,
     })
@@ -317,29 +298,29 @@ export const markMessageAsRead = asyncHandler(async (req: Request, res: Response
 
   const { data: message, error: fetchError } = await db
     .from('messages')
-    .select('id, recipient_id, is_read, read_at')
+    .select('id, receiver_id, read_at')
     .eq('id', id)
     .maybeSingle();
   if (fetchError) throw ApiError.internal(`Failed to fetch message: ${fetchError.message}`);
   if (!message) throw ApiError.notFound('Message not found');
 
   // Check if user is the recipient
-  if (message.recipient_id !== userId) {
+  if (message.receiver_id !== userId) {
     throw ApiError.forbidden('Not authorized to mark this message as read');
   }
 
   const { data: updated, error: updateError } = await db
     .from('messages')
-    .update({ is_read: true, read_at: new Date().toISOString() })
+    .update({ read_at: new Date().toISOString() })
     .eq('id', id)
-    .select('id, is_read, read_at')
+    .select('id, read_at')
     .single();
   if (updateError) throw ApiError.internal(`Failed to update message: ${updateError.message}`);
 
   res.json(
     ApiResponse.success('Message marked as read', {
       id: updated.id,
-      isRead: updated.is_read,
+      isRead: Boolean(updated.read_at),
       readAt: updated.read_at,
     })
   );
@@ -357,14 +338,14 @@ export const deleteMessage = asyncHandler(async (req: Request, res: Response) =>
 
   const { data: message, error: fetchError } = await db
     .from('messages')
-    .select('id, sender_id, recipient_id')
+    .select('id, sender_id, receiver_id')
     .eq('id', id)
     .maybeSingle();
   if (fetchError) throw ApiError.internal(`Failed to fetch message: ${fetchError.message}`);
   if (!message) throw ApiError.notFound('Message not found');
 
   // Check if user is sender or recipient
-  if (message.sender_id !== userId && message.recipient_id !== userId) {
+  if (message.sender_id !== userId && message.receiver_id !== userId) {
     throw ApiError.forbidden('Not authorized to delete this message');
   }
 
@@ -386,8 +367,8 @@ export const getUnreadCount = asyncHandler(async (req: Request, res: Response) =
   const { count, error } = await db
     .from('messages')
     .select('id', { count: 'exact', head: true })
-    .eq('recipient_id', userId)
-    .eq('is_read', false);
+    .eq('receiver_id', userId)
+    .is('read_at', null);
   if (error) throw ApiError.internal(`Failed to count unread messages: ${error.message}`);
 
   res.json(ApiResponse.success('Unread count fetched successfully', { unreadCount: count || 0 }));

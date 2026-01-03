@@ -33,13 +33,7 @@ interface ResultRow {
   grade: string;
   grade_points: number;
   entered_by: string;
-  approved_by_hod: boolean;
-  approved_by_admin: boolean;
   status?: string;
-  hod_approved_by?: string | null;
-  hod_approved_at?: string | null;
-  admin_approved_by?: string | null;
-  admin_approved_at?: string | null;
   published_at?: string | null;
   courses?: CourseRow;
   sessions?: SessionRow;
@@ -71,8 +65,6 @@ const buildTranscriptPayload = async (requester: UserLike | undefined, studentId
     .from('results')
     .select('*, courses:courses(credits, name), sessions:sessions(name)')
     .eq('student_id', studentId)
-    .eq('approved_by_hod', true)
-    .eq('approved_by_admin', true)
     .eq('status', 'approved');
   if (resErr) throw ApiError.internal(`Failed to fetch results: ${resErr.message}`);
 
@@ -156,8 +148,6 @@ export const createResult = asyncHandler(async (req: Request, res: Response) => 
       grade,
       grade_points: gradePoints,
       entered_by: userId,
-      approved_by_hod: false,
-      approved_by_admin: false,
       status: 'pending',
     })
     .select()
@@ -179,8 +169,6 @@ export const getResults = asyncHandler(async (req: Request, res: Response) => {
   if (req.user.role === USER_ROLES.STUDENT) {
     query = query
       .eq('student_id', resolveUserId(req.user) as string)
-      .eq('approved_by_hod', true)
-      .eq('approved_by_admin', true)
       .eq('status', 'approved');
   } else {
     if (student) query = query.eq('student_id', student as string);
@@ -208,7 +196,7 @@ export const getResultById = asyncHandler(async (req: Request, res: Response) =>
   if (
     req.user &&
     req.user.role === USER_ROLES.STUDENT &&
-    (result.student_id !== resolveUserId(req.user) || result.status !== 'approved' || !result.approved_by_hod || !result.approved_by_admin)
+    (result.student_id !== resolveUserId(req.user) || result.status !== 'approved')
   )
     throw ApiError.forbidden('You are not authorized to view this result');
   res.json(ApiResponse.success('Data retrieved successfully', result));
@@ -222,12 +210,12 @@ export const updateResult = asyncHandler(async (req: Request, res: Response) => 
 
   const { data: result, error: fetchErr } = await db
     .from('results')
-    .select('id, entered_by, approved_by_hod, approved_by_admin, ca_score, exam_score')
+    .select('id, entered_by, status, ca_score, exam_score')
     .eq('id', id)
     .maybeSingle();
   if (fetchErr) throw ApiError.internal(`Failed to fetch result: ${fetchErr.message}`);
   if (!result) throw ApiError.notFound('Result not found');
-  if (result.approved_by_hod || result.approved_by_admin) throw ApiError.badRequest('Cannot update approved results');
+  if (result.status === 'approved') throw ApiError.badRequest('Cannot update approved results');
   if (req.user!.role !== USER_ROLES.ADMIN && result.entered_by !== userId)
     throw ApiError.forbidden('You are not authorized to update this result');
 
@@ -276,14 +264,14 @@ export const approveResultByHOD = asyncHandler(async (req: Request, res: Respons
   const userId = resolveUserId(req.user);
   if (!userId) throw ApiError.unauthorized('User not authenticated');
 
-  const { data: result, error: fetchErr } = await db.from('results').select('id, approved_by_hod').eq('id', id).maybeSingle();
+  const { data: result, error: fetchErr } = await db.from('results').select('id, status').eq('id', id).maybeSingle();
   if (fetchErr) throw ApiError.internal(`Failed to fetch result: ${fetchErr.message}`);
   if (!result) throw ApiError.notFound('Result not found');
-  if (result.approved_by_hod) throw ApiError.badRequest('Result already approved by HOD');
+  if (result.status === 'approved') throw ApiError.badRequest('Result already approved');
 
   const { data: updated, error } = await db
     .from('results')
-    .update({ approved_by_hod: true, hod_approved_by: userId, hod_approved_at: new Date().toISOString() })
+    .update({ status: 'approved', published_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single();
@@ -294,21 +282,19 @@ export const approveResultByHOD = asyncHandler(async (req: Request, res: Respons
 export const approveResultByAdmin = asyncHandler(async (req: Request, res: Response) => {
   const db = supabaseAdmin();
   const { id } = req.params;
-  const userId = resolveUserId(req.user);
 
   const { data: result, error: fetchErr } = await db
     .from('results')
-    .select('id, approved_by_hod, approved_by_admin')
+    .select('id, status')
     .eq('id', id)
     .maybeSingle();
   if (fetchErr) throw ApiError.internal(`Failed to fetch result: ${fetchErr.message}`);
   if (!result) throw ApiError.notFound('Result not found');
-  if (!result.approved_by_hod) throw ApiError.badRequest('Result must be approved by HOD first');
-  if (result.approved_by_admin) throw ApiError.badRequest('Result already approved by Admin');
+  if (result.status === 'approved') throw ApiError.badRequest('Result already approved');
 
   const { data: updated, error } = await db
     .from('results')
-    .update({ approved_by_admin: true, admin_approved_by: userId, admin_approved_at: new Date().toISOString() })
+    .update({ status: 'approved', published_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single();
@@ -326,8 +312,6 @@ export const publishResults = asyncHandler(async (req: Request, res: Response) =
     .select('id', { count: 'exact', head: true })
     .eq('session_id', session)
     .eq('semester', semester)
-    .eq('approved_by_hod', true)
-    .eq('approved_by_admin', true)
     .eq('status', 'pending');
   if (countErr) throw ApiError.internal(`Failed to count results: ${countErr.message}`);
 
@@ -336,8 +320,6 @@ export const publishResults = asyncHandler(async (req: Request, res: Response) =
     .update({ status: 'approved', published_at: new Date().toISOString() })
     .eq('session_id', session)
     .eq('semester', semester)
-    .eq('approved_by_hod', true)
-    .eq('approved_by_admin', true)
     .eq('status', 'pending');
   if (pubErr) throw ApiError.internal(`Failed to publish results: ${pubErr.message}`);
 
@@ -382,8 +364,6 @@ export const getResultsSummary = asyncHandler(async (req: Request, res: Response
     .from('results')
     .select('*, courses:courses(credits)')
     .eq('student_id', studentId)
-    .eq('approved_by_hod', true)
-    .eq('approved_by_admin', true)
     .eq('status', 'approved');
   if (session) query = query.eq('session_id', session as string);
   if (semester) query = query.eq('semester', semester as string);
