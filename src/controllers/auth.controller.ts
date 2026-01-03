@@ -128,7 +128,7 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     }
 
     res.status(201).json(
-      ApiResponse.success('Registration successful. Please verify your email.', {
+      ApiResponse.success('Registration successful. You can now log in.', {
         userId,
         email,
       })
@@ -264,7 +264,7 @@ export const getCurrentUser = asyncHandler(async (req: Request, res: Response) =
     const db = supabaseAdmin();
     const profileRes = await db
       .from('profiles')
-      .select('id,email,first_name,last_name,role,avatar,student_id,department_id,level,is_active,two_factor_enabled,last_login,departments(name,code,faculty)')
+      .select('id,email,first_name,last_name,role,avatar,student_id,department_id,level,is_active,two_factor_enabled,last_login')
       .eq('id', userId)
       .maybeSingle();
 
