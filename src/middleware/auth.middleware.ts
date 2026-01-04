@@ -4,6 +4,7 @@ import { SupabaseJwtPayload, verifySupabaseAccessToken } from '../config/supabas
 import { supabaseAdmin } from '../config/supabase';
 import { ApiError } from '../utils/ApiError';
 import { asyncHandler } from '../utils/asyncHandler';
+import logger from '../config/logger';
 
 type ProfileRow = {
   id: string;
@@ -119,6 +120,13 @@ export const authenticate = asyncHandler(async (req: Request, _res: Response, ne
         role: roleFromToken || roleFromProfile || 'student',
         claims: payload,
       };
+
+      // Debug: log the resolved user object so we can verify role at request time
+      try {
+        logger.info('authenticate set user', { user: req.user });
+      } catch (e) {
+        // swallow
+      }
 
       return next();
     } catch (err) {
