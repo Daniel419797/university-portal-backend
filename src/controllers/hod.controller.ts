@@ -1,9 +1,88 @@
+
 import { Request, Response } from 'express';
 import { supabaseAdmin } from '../config/supabase';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse } from '../utils/ApiResponse';
 import { ApiError } from '../utils/ApiError';
 import { calculateGPA } from '../utils/helpers';
+
+// HOD Staff list for /hod/staff
+export const getHodStaff = asyncHandler(async (req: Request, res: Response) => {
+  const db = supabaseAdmin();
+  const userId = req.user?.userId;
+  if (!userId) throw ApiError.unauthorized('Unauthorized');
+  const department = await ensureDepartmentForHod(db, userId);
+  const { page, limit, skip } = getPagination(req.query.page, req.query.limit);
+  const search = normalizeQueryValue(req.query.search);
+
+  let base = db
+    .from('profiles')
+    .select('id,first_name,last_name,email,phone_number,is_active,created_at', { count: 'exact' })
+    .eq('role', 'lecturer')
+    .eq('department', department.id);
+
+  if (search) {
+    const q = `%${search}%`;
+    base = base.or(`first_name.ilike.${q},last_name.ilike.${q},email.ilike.${q}`);
+  }
+
+  const { data: staffData, count, error } = await base.range(skip, skip + limit - 1);
+  if (error) throw ApiError.internal(`Failed to fetch staff: ${error.message}`);
+  const staff = (staffData ?? []) as ProfileRow[];
+  const total = count ?? 0;
+
+  res.json(
+    ApiResponse.success('Staff retrieved successfully', {
+      staff,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    })
+  );
+});
+
+// HOD Analytics for /hod/analytics
+export const getHodAnalytics = asyncHandler(async (req: Request, res: Response) => {
+  const db = supabaseAdmin();
+  const userId = req.user?.userId;
+  if (!userId) throw ApiError.unauthorized('Unauthorized');
+  const department = await ensureDepartmentForHod(db, userId);
+  const stats = await collectDepartmentStats(db, department.id);
+  const courses = await getRows<CourseRow>(db.from('courses').select('id').eq('department', department.id));
+  const courseIds = courses.map((course) => course.id);
+
+  if (!courseIds.length) {
+    return res.json(
+      ApiResponse.success('Analytics retrieved successfully', {
+        ...stats,
+        passRate: 0,
+        publishedResults: 0,
+      })
+    );
+  }
+
+  const [publishedResults, passedResults] = await Promise.all([
+    getExactCount(db.from('results').select('id', { count: 'exact', head: true }).in('course', courseIds).eq('is_published', true)),
+    getExactCount(db.from('results').select('id', { count: 'exact', head: true }).in('course', courseIds).eq('is_published', true).neq('grade', 'F')),
+  ]);
+
+  const passRate = publishedResults
+    ? parseFloat(((passedResults / publishedResults) * 100).toFixed(1))
+    : 0;
+
+  return res.json(
+    ApiResponse.success('Analytics retrieved successfully', {
+      ...stats,
+      publishedResults,
+      passRate,
+      averageClassSize:
+        stats.courseCount > 0 ? parseFloat(((stats.activeEnrollments / stats.courseCount)).toFixed(1)) : 0,
+    })
+  );
+});
 
 type DepartmentRow = { id: string; name?: string; faculty?: string; is_active?: boolean; hod?: string };
 type ProfileRow = { id: string; role: string; first_name: string; last_name: string; email: string; student_id?: string; level?: string; phone_number?: string; is_active?: boolean; department?: string; created_at?: string };
@@ -146,43 +225,6 @@ export const getHodStudentProfile = asyncHandler(async (req: Request, res: Respo
         activeCourses: enrollments.filter((enrollment) => enrollment.status === 'active').length,
         publishedResults: results.filter((result) => result.is_published).length,
         gpa,
-      },
-    })
-  );
-});
-
-export const getHodStaff = asyncHandler(async (req: Request, res: Response) => {
-  const db = supabaseAdmin();
-  const userId = req.user?.userId;
-  if (!userId) throw ApiError.unauthorized('Unauthorized');
-  const department = await ensureDepartmentForHod(db, userId);
-  const { page, limit, skip } = getPagination(req.query.page, req.query.limit);
-  const search = normalizeQueryValue(req.query.search);
-
-  let base = db
-    .from('profiles')
-    .select('id,first_name,last_name,email,phone_number,is_active,created_at', { count: 'exact' })
-    .eq('role', 'lecturer')
-    .eq('department', department.id);
-
-  if (search) {
-    const q = `%${search}%`;
-    base = base.or(`first_name.ilike.${q},last_name.ilike.${q},email.ilike.${q}`);
-  }
-
-  const { data: staffData, count, error } = await base.range(skip, skip + limit - 1);
-  if (error) throw ApiError.internal(`Failed to fetch staff: ${error.message}`);
-  const staff = (staffData ?? []) as ProfileRow[];
-  const total = count ?? 0;
-
-  res.json(
-    ApiResponse.success('Staff retrieved successfully', {
-      staff,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
       },
     })
   );
@@ -413,42 +455,25 @@ export const getHodResultDetail = asyncHandler(async (req: Request, res: Respons
   return res.json(ApiResponse.success('Result retrieved successfully', result));
 });
 
-export const getHodAnalytics = asyncHandler(async (req: Request, res: Response) => {
+export const getHodDashboard = asyncHandler(async (req: Request, res: Response) => {
   const db = supabaseAdmin();
   const userId = req.user?.userId;
   if (!userId) throw ApiError.unauthorized('Unauthorized');
   const department = await ensureDepartmentForHod(db, userId);
+  // Collect department stats
   const stats = await collectDepartmentStats(db, department.id);
-  const courses = await getRows<CourseRow>(db.from('courses').select('id').eq('department', department.id));
-  const courseIds = courses.map((course) => course.id);
-
-  if (!courseIds.length) {
-    return res.json(
-      ApiResponse.success('Analytics retrieved successfully', {
-        ...stats,
-        passRate: 0,
-        publishedResults: 0,
-      })
-    );
-  }
-
-  const [publishedResults, passedResults] = await Promise.all([
-    getExactCount(db.from('results').select('id', { count: 'exact', head: true }).in('course', courseIds).eq('is_published', true)),
-    getExactCount(db.from('results').select('id', { count: 'exact', head: true }).in('course', courseIds).eq('is_published', true).neq('grade', 'F')),
-  ]);
-
-  const passRate = publishedResults
-    ? parseFloat(((passedResults / publishedResults) * 100).toFixed(1))
-    : 0;
-
-  return res.json(
-    ApiResponse.success('Analytics retrieved successfully', {
-      ...stats,
-      publishedResults,
-      passRate,
-      averageClassSize:
-        stats.courseCount > 0 ? parseFloat(((stats.activeEnrollments / stats.courseCount)).toFixed(1)) : 0,
-    })
-  );
+  // Get recent courses
+  const courses = await getRows<CourseRow>(db.from('courses').select('id,code,title,level,semester,credits').eq('department', department.id).limit(5));
+  // Get recent students
+  const students = await getRows<ProfileRow>(db.from('profiles').select('id,first_name,last_name,email,student_id,level').eq('department', department.id).eq('role', 'student').limit(5));
+  // Get pending results
+  const pendingResults = await getRows<ResultRow>(db.from('results').select('id,course,total_score,grade,is_published,approved_by_hod').in('course', courses.map(c => c.id)).eq('approved_by_hod', false).limit(5));
+  return res.json(ApiResponse.success('HOD dashboard data retrieved successfully', {
+    department,
+    stats,
+    recentCourses: courses,
+    recentStudents: students,
+    pendingResults,
+  }));
 });
 
