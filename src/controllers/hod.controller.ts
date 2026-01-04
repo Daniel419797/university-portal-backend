@@ -112,8 +112,8 @@ const ensureDepartmentForHod = async (db: ReturnType<typeof supabaseAdmin>, hodI
   const department = await getSingle<DepartmentRow>(
     db
       .from('departments')
-      .select('id,name,faculty,is_active,hod')
-      .eq('hod', hodId)
+      .select('id,name,faculty,is_active,hod_id')
+      .eq('hod_id', hodId)
       .limit(1)
   );
   if (!department) {
