@@ -8,7 +8,7 @@ export const authorizeRoles = (...roles: UserRole[]) => {
       throw ApiError.unauthorized('Authentication required');
     }
 
-    if (!roles.includes((req as any).user.role as UserRole)) {
+    if (!roles.includes((req as any).user.role)) {
       throw ApiError.forbidden('You do not have permission to access this resource');
     }
 
