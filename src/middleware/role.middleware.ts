@@ -13,6 +13,10 @@ export const authorizeRoles = (...roles: UserRole[]) => {
     try {
       const currentRole = (req as any).user.role;
       logger.info('authorizeRoles check', { allowedRoles: roles, currentRole });
+      // Also print to stdout so the message appears in hosting platform logs
+      // (winston console transport is disabled in production by default)
+      // eslint-disable-next-line no-console
+      console.log('authorizeRoles check', { allowedRoles: roles, currentRole });
     } catch (e) {
       // swallow logging errors to avoid affecting authorization flow
     }

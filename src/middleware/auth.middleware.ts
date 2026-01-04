@@ -124,6 +124,9 @@ export const authenticate = asyncHandler(async (req: Request, _res: Response, ne
       // Debug: log the resolved user object so we can verify role at request time
       try {
         logger.info('authenticate set user', { user: req.user });
+        // Also print to stdout so the message appears in hosting platform logs
+        // eslint-disable-next-line no-console
+        console.log('authenticate set user', { user: req.user });
       } catch (e) {
         // swallow
       }
