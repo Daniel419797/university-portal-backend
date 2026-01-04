@@ -6,60 +6,22 @@ import { ApiResponse } from '../utils/ApiResponse';
 import { ApiError } from '../utils/ApiError';
 
 type CourseRow = { id: string; title: string; code: string; credits?: number; created_at?: string };
-type EnrollmentRow = {
-  id: string;
-  created_at?: string;
-  student_id?: string;
-  status?: string;
-  course_id?: string;
-};
-type AssignmentRow = {
-  id: string;
-  title: string;
-  total_marks?: number;
-  due_date?: string;
-  course_id?: string;
-};
-type SubmissionRow = {
-  id?: string;
-  assignment_id?: string;
-  student_id?: string;
-  grade?: number | null;
-};
-type ResultRow = {
-  id: string;
-  grade?: string | null;
-  total_score?: number | null;
-  course_id?: string;
-  credits?: number;
-};
-type ProfileRow = {
-  id: string;
-  first_name: string;
-  last_name: string;
-  email?: string;
-  role?: string;
-  department?: string | null;
-  is_active?: boolean;
-  created_at?: string;
-};
-type PaymentRow = {
-  id: string;
-  amount: number;
-  status: string;
-  type?: string;
-  created_at?: string;
-};
-type QuizRow = { id: string; title?: string; course_id?: string };
+type EnrollmentRow = { id: string; course_id?: string; status?: string; created_at?: string };
+type AssignmentRow = { id: string; title: string; total_marks?: number; due_date?: string; course_id?: string };
+type SubmissionRow = { id: string; assignment_id?: string; grade?: number | null };
+type ResultRow = { grade?: string | null; course?: { credits?: number } };
+type ProfileRow = { id: string; first_name: string; last_name: string; email?: string; role?: string; department?: string | null; is_active?: boolean; created_at?: string };
+type PaymentRow = { id: string; amount: number; status: string; type?: string; created_at?: string };
 
-// Helper: safe exact count with detailed logging
-const getExactCount = async (queryBuilder: unknown, label: string): Promise<number> => {
+// Helper: Get exact count safely
+const getExactCount = async (
+  builder: any, // PostgrestFilterBuilder
+  label: string
+): Promise<number> => {
   try {
-    
-    const qb = queryBuilder as any;
-    const { count, error } = await qb.select('*', { count: 'exact', head: true });
+    const { count, error } = await builder.select('*', { count: 'exact', head: true });
     if (error) {
-      logger.error(`Count query failed [${label}]`, { error });
+      logger.error(`Count query failed [${label}]`, { error: error.message, details: error });
       return 0;
     }
     return count ?? 0;
@@ -69,14 +31,15 @@ const getExactCount = async (queryBuilder: unknown, label: string): Promise<numb
   }
 };
 
-// Helper: safe data fetch
-const getRows = async <T>(queryBuilder: unknown, label: string): Promise<T[]> => {
+// Helper: Get rows safely
+const getRows = async <T>(
+  builder: any, // PostgrestFilterBuilder
+  label: string
+): Promise<T[]> => {
   try {
-   
-    const qb = queryBuilder as any;
-    const { data, error } = await qb;
+    const { data, error } = await builder;
     if (error) {
-      logger.error(`Data query failed [${label}]`, { error });
+      logger.error(`Data query failed [${label}]`, { error: error.message, details: error });
       return [];
     }
     return data ?? [];
@@ -86,20 +49,21 @@ const getRows = async <T>(queryBuilder: unknown, label: string): Promise<T[]> =>
   }
 };
 
-// @desc    Get Student Dashboard
+// ======================
+// Student Dashboard
+// ======================
 export const getStudentDashboard = asyncHandler(async (req: Request, res: Response) => {
-  
   const db = supabaseAdmin() as any;
   const userId = req.user?.userId;
   if (!userId) throw ApiError.unauthorized('Authentication required');
 
-  // Enrolled courses count
+  // 1. Enrolled courses count
   const enrolledCourses = await getExactCount(
     db.from('enrollments').eq('student_id', userId).eq('status', 'active'),
-    'student_enrolled_courses'
+    'student_enrolled_courses_count'
   );
 
-  // Active enrollments with course details
+  // 2. Active enrollments with course details
   const activeEnrollments = await getRows<EnrollmentRow & { course: CourseRow }>(
     db
       .from('enrollments')
@@ -113,8 +77,8 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
     .map((e) => e.course?.id)
     .filter((id): id is string => Boolean(id));
 
-  // Upcoming assignments
-  const assignments = courseIds.length
+  // 3. Upcoming assignments
+  const assignments = courseIds.length > 0
     ? await getRows<AssignmentRow & { course: CourseRow }>(
         db
           .from('assignments')
@@ -125,8 +89,8 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
       )
     : [];
 
-  // Submitted assignments
-  const submitted = assignments.length
+  // 4. Submitted assignments
+  const submitted = assignments.length > 0
     ? await getRows<SubmissionRow>(
         db
           .from('submissions')
@@ -140,8 +104,8 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
   const submittedIds = new Set(submitted.map((s) => s.assignment_id).filter(Boolean));
   const pendingAssignments = assignments.filter((a) => !submittedIds.has(a.id)).length;
 
-  // Results for CGPA
-  const results = await getRows<ResultRow & { course: { credits?: number } }>(
+  // 5. Results for CGPA
+  const results = await getRows<ResultRow>(
     db
       .from('results')
       .select('grade, course:courses(credits)')
@@ -166,7 +130,7 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
     cgpa = totalCredits > 0 ? totalPoints / totalCredits : 0;
   }
 
-  // Payment status
+  // 6. Payment status
   const latestPayments = await getRows<PaymentRow>(
     db
       .from('payments')
@@ -179,17 +143,18 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
   );
   const paymentStatus = latestPayments.length > 0 ? 'Successful' : 'Pending';
 
-  // Recent items
+  // 7. Recent items
   const recentCourses = activeEnrollments.slice(0, 5).map((e) => e.course!);
   const recentAssignments = assignments.slice(0, 5);
 
+  // 8. Unread notifications
   const unreadNotifications = await getExactCount(
     db.from('notifications').eq('user_id', userId).is('read_at', null),
     'student_unread_notifications'
   );
 
   res.json(
-    ApiResponse.success('Dashboard data fetched successfully', {
+    ApiResponse.success('Student dashboard fetched successfully', {
       enrolledCourses,
       pendingAssignments,
       cgpa: parseFloat(cgpa.toFixed(2)),
@@ -207,61 +172,64 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
   );
 });
 
-// @desc    Get Lecturer Dashboard
+// ======================
+// Lecturer Dashboard
+// ======================
 export const getLecturerDashboard = asyncHandler(async (req: Request, res: Response) => {
-  
   const db = supabaseAdmin() as any;
   const userId = req.user?.userId;
   if (!userId) throw ApiError.unauthorized('Authentication required');
 
-  // Assigned courses
+  // 1. Assigned courses count
   const assignedCourses = await getExactCount(
     db.from('courses').eq('lecturer_id', userId).eq('is_active', true),
-    'lecturer_assigned_courses'
+    'lecturer_assigned_courses_count'
   );
 
+  // 2. Get lecturer's course IDs
   const courses = await getRows<CourseRow>(
     db.from('courses').select('id,title,code').eq('lecturer_id', userId),
-    'lecturer_courses'
+    'lecturer_courses_list'
   );
-  const courseIds = courses.map((c) => c.id);
 
-  // Total active students across lecturer's courses
-  const totalStudents = courseIds.length
+  const courseIds = courses.map(c => c.id);
+
+  // 3. Total enrolled students across all courses
+  const totalStudents = courseIds.length > 0
     ? await getExactCount(
         db.from('enrollments').in('course_id', courseIds).eq('status', 'active'),
         'lecturer_total_students'
       )
     : 0;
 
-  // Assignments & pending grading
-  const assignments = courseIds.length
+  // 4. Assignments and pending grading
+  const assignments = courseIds.length > 0
     ? await getRows<AssignmentRow>(
-        db.from('assignments').select('id,title,course_id').in('course_id', courseIds),
+        db.from('assignments').select('id').in('course_id', courseIds),
         'lecturer_assignments'
       )
     : [];
 
-  const assignmentIds = assignments.map((a) => a.id);
-  const pendingSubmissions = assignmentIds.length
+  const assignmentIds = assignments.map(a => a.id);
+
+  const pendingSubmissions = assignmentIds.length > 0
     ? await getExactCount(
         db.from('submissions').in('assignment_id', assignmentIds).is('grade', null),
         'lecturer_pending_submissions'
       )
     : 0;
 
-  // Quizzes count
-  const quizzes = courseIds.length
-    ? await getRows<QuizRow>(
-        db.from('quizzes').select('id').in('course_id', courseIds),
-        'lecturer_quizzes'
+  // 5. Quizzes count
+  const quizzesCount = courseIds.length > 0
+    ? await getExactCount(
+        db.from('quizzes').in('course_id', courseIds),
+        'lecturer_quizzes_count'
       )
-    : [];
+    : 0;
 
-  // Recent courses with student count
+  // 6. Recent courses with student counts
   const recentCoursesRaw = await getRows<CourseRow>(
-    db
-      .from('courses')
+    db.from('courses')
       .select('id,title,code')
       .eq('lecturer_id', userId)
       .order('created_at', { ascending: false })
@@ -276,17 +244,16 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
       code: course.code,
       studentCount: await getExactCount(
         db.from('enrollments').eq('course_id', course.id).eq('status', 'active'),
-        `lecturer_recent_course_${course.id}_students`
+        `lecturer_course_${course.id}_students`
       ),
     }))
   );
 
-  // Recent assignments
-  const recentAssignments = courseIds.length
+  // 7. Recent assignments
+  const recentAssignments = courseIds.length > 0
     ? await getRows<AssignmentRow & { course: CourseRow }>(
-        db
-          .from('assignments')
-          .select('id,title,total_marks,due_date,course:courses(id,title,code)')
+        db.from('assignments')
+          .select('id,title,total_marks,due_date,course:courses(title,code)')
           .in('course_id', courseIds)
           .order('created_at', { ascending: false })
           .limit(5),
@@ -294,19 +261,20 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
       )
     : [];
 
+  // 8. Unread notifications
   const unreadNotifications = await getExactCount(
     db.from('notifications').eq('user_id', userId).is('read_at', null),
     'lecturer_unread_notifications'
   );
 
   res.json(
-    ApiResponse.success('Dashboard data fetched successfully', {
+    ApiResponse.success('Lecturer dashboard fetched successfully', {
       assignedCourses,
       totalStudents,
       pendingSubmissions,
-      pendingQuizzes: quizzes.length,
+      pendingQuizzes: quizzesCount,
       recentCourses: recentCoursesWithStats,
-      recentAssignments: recentAssignments.map((a) => ({
+      recentAssignments: recentAssignments.map(a => ({
         id: a.id,
         title: a.title,
         course: { title: a.course.title, code: a.course.code },
@@ -318,65 +286,67 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
   );
 });
 
-// @desc    Get HOD Dashboard
-// @route   GET /api/v1/hod/dashboard
-// @access  Private (HOD)
+// ======================
+// HOD Dashboard
+// ======================
 export const getHODDashboard = asyncHandler(async (req: Request, res: Response) => {
-  
   const db = supabaseAdmin() as any;
   const userId = req.user?.userId;
   if (!userId) throw ApiError.unauthorized('Authentication required');
-  const userRows = await getRows<ProfileRow>(db.from('profiles').select('id,department').eq('id', userId).limit(1), 'hod_user');
-  const user = userRows[0];
 
+  // 1. Get user's department
+  const userRows = await getRows<ProfileRow>(
+    db.from('profiles').select('id,department').eq('id', userId).limit(1),
+    'hod_user_department'
+  );
+  const user = userRows[0];
   if (!user || !user.department) {
     throw ApiError.badRequest('Department not found for user');
   }
 
+  // 2. Department statistics
   const totalStudents = await getExactCount(
-    db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('department', user.department),
+    db.from('profiles').eq('role', 'student').eq('department', user.department),
     'hod_total_students'
   );
 
   const totalStaff = await getExactCount(
-    db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'lecturer').eq('department', user.department),
+    db.from('profiles').eq('role', 'lecturer').eq('department', user.department),
     'hod_total_staff'
   );
 
   const totalCourses = await getExactCount(
-    db.from('courses').select('id', { count: 'exact', head: true }).eq('department', user.department),
+    db.from('courses').eq('department', user.department),
     'hod_total_courses'
   );
 
   const activeLecturers = await getExactCount(
-    db
-      .from('profiles')
-      .select('id', { count: 'exact', head: true })
+    db.from('profiles')
       .eq('role', 'lecturer')
       .eq('department', user.department)
       .eq('is_active', true),
     'hod_active_lecturers'
   );
 
+  // 3. Pending approvals
   const pendingResults = await getExactCount(
-    db
-      .from('results')
-      .select('id', { count: 'exact', head: true })
+    db.from('results')
       .eq('approved_by_hod', false)
       .eq('is_published', false),
     'hod_pending_results'
   );
 
   const pendingClearances = await getExactCount(
-    db.from('clearance').select('id', { count: 'exact', head: true }).eq('overall_status', 'in-progress'),
+    db.from('clearance').eq('overall_status', 'in-progress'),
     'hod_pending_clearances'
   );
 
+  // 4. Recent enrollments
   const departmentCourses = await getRows<CourseRow>(
     db.from('courses').select('id').eq('department', user.department),
     'hod_department_courses'
   );
-  const departmentCourseIds = departmentCourses.map((c) => c.id);
+  const departmentCourseIds = departmentCourses.map(c => c.id);
 
   const recentEnrollments = await getRows<EnrollmentRow & { student?: ProfileRow; course?: CourseRow }>(
     db
@@ -389,13 +359,14 @@ export const getHODDashboard = asyncHandler(async (req: Request, res: Response) 
     'hod_recent_enrollments'
   );
 
+  // 5. Unread notifications
   const unreadNotifications = await getExactCount(
     db.from('notifications').eq('user_id', userId).is('read_at', null),
     'hod_unread_notifications'
   );
 
   res.json(
-    ApiResponse.success('Dashboard data fetched successfully', {
+    ApiResponse.success('HOD dashboard fetched successfully', {
       departmentStats: {
         totalStudents,
         totalStaff,
@@ -419,30 +390,47 @@ export const getHODDashboard = asyncHandler(async (req: Request, res: Response) 
   );
 });
 
-// @desc    Get Bursary Dashboard
-// @route   GET /api/v1/bursary/dashboard
-// @access  Private (Bursary)
+// ======================
+// Bursary Dashboard
+// ======================
 export const getBursaryDashboard = asyncHandler(async (req: Request, res: Response) => {
-  
   const db = supabaseAdmin() as any;
   const userId = req.user?.userId;
   if (!userId) throw ApiError.unauthorized('Authentication required');
 
-  const totalPayments = await getExactCount(db.from('payments').select('id', { count: 'exact', head: true }), 'bursary_total_payments');
+  // 1. Payment statistics
+  const totalPayments = await getExactCount(db.from('payments'), 'bursary_total_payments');
 
-  const verifiedPayments = await getExactCount(db.from('payments').select('id', { count: 'exact', head: true }).eq('status', 'verified'), 'bursary_verified_payments');
+  const verifiedPayments = await getExactCount(
+    db.from('payments').eq('status', 'verified'),
+    'bursary_verified_payments'
+  );
 
-  const pendingPayments = await getExactCount(db.from('payments').select('id', { count: 'exact', head: true }).eq('status', 'pending'), 'bursary_pending_payments');
+  const pendingPayments = await getExactCount(
+    db.from('payments').eq('status', 'pending'),
+    'bursary_pending_payments'
+  );
 
-  const failedPayments = await getExactCount(db.from('payments').select('id', { count: 'exact', head: true }).eq('status', 'failed'), 'bursary_failed_payments');
+  const failedPayments = await getExactCount(
+    db.from('payments').eq('status', 'failed'),
+    'bursary_failed_payments'
+  );
 
-  const verifiedRows = await getRows<{ amount: number }>(db.from('payments').select('amount').eq('status', 'verified'), 'bursary_verified_amounts');
+  // 2. Revenue calculations
+  const verifiedRows = await getRows<{ amount: number }>(
+    db.from('payments').select('amount').eq('status', 'verified'),
+    'bursary_verified_amounts'
+  );
   const paidAmount = verifiedRows.reduce((sum: number, p) => sum + (Number(p.amount) || 0), 0);
 
-  const totalStudents = await getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student'), 'bursary_total_students');
+  const totalStudents = await getExactCount(
+    db.from('profiles').eq('role', 'student'),
+    'bursary_total_students'
+  );
   const expectedRevenue = totalStudents * 150000; // Assuming 150,000 per student
   const pendingAmount = expectedRevenue - paidAmount;
 
+  // 3. Recent payments
   const recentPayments = await getRows<PaymentRow & { student?: { id: string; first_name: string; last_name: string; email?: string } }>(
     db
       .from('payments')
@@ -452,17 +440,18 @@ export const getBursaryDashboard = asyncHandler(async (req: Request, res: Respon
     'bursary_recent_payments'
   );
 
-  // Get scholarship statistics (placeholder for now)
+  // 4. Scholarship statistics (placeholder)
   const totalScholarships = 0;
   const pendingScholarships = 0;
 
+  // 5. Unread notifications
   const unreadNotifications = await getExactCount(
     db.from('notifications').eq('user_id', userId).is('read_at', null),
     'bursary_unread_notifications'
   );
 
   res.json(
-    ApiResponse.success('Dashboard data fetched successfully', {
+    ApiResponse.success('Bursary dashboard fetched successfully', {
       paymentStats: {
         total: totalPayments,
         verified: verifiedPayments,
@@ -498,28 +487,30 @@ export const getBursaryDashboard = asyncHandler(async (req: Request, res: Respon
 // @route   GET /api/v1/admin/dashboard
 // @access  Private (Admin)
 export const getAdminDashboard = asyncHandler(async (req: Request, res: Response) => {
-  
   const db = supabaseAdmin() as any;
   const userId = req.user?.userId;
   if (!userId) throw ApiError.unauthorized('Authentication required');
 
-  // Get user statistics
-  const totalUsers = await getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }), 'admin_total_users');
-  const totalStudents = await getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student'), 'admin_total_students');
-  const totalLecturers = await getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'lecturer'), 'admin_total_lecturers');
-  const totalAdmins = await getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'admin'), 'admin_total_admins');
-  const activeUsers = await getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }).eq('is_active', true), 'admin_active_users');
+  // 1. User statistics
+  const totalUsers = await getExactCount(db.from('profiles'), 'admin_total_users');
+  const totalStudents = await getExactCount(db.from('profiles').eq('role', 'student'), 'admin_total_students');
+  const totalLecturers = await getExactCount(db.from('profiles').eq('role', 'lecturer'), 'admin_total_lecturers');
+  const totalAdmins = await getExactCount(db.from('profiles').eq('role', 'admin'), 'admin_total_admins');
+  const activeUsers = await getExactCount(db.from('profiles').eq('is_active', true), 'admin_active_users');
 
-  // Get course statistics
-  const totalCourses = await getExactCount(db.from('courses').select('id', { count: 'exact', head: true }), 'admin_total_courses');
-  const activeCourses = await getExactCount(db.from('courses').select('id', { count: 'exact', head: true }).eq('is_active', true), 'admin_active_courses');
+  // 2. Course statistics
+  const totalCourses = await getExactCount(db.from('courses'), 'admin_total_courses');
+  const activeCourses = await getExactCount(db.from('courses').eq('is_active', true), 'admin_active_courses');
 
-  // Get enrollment statistics
-  const totalEnrollments = await getExactCount(db.from('enrollments').select('id', { count: 'exact', head: true }), 'admin_total_enrollments');
-  const activeEnrollments = await getExactCount(db.from('enrollments').select('id', { count: 'exact', head: true }).eq('status', 'active'), 'admin_active_enrollments');
+  // 3. Enrollment statistics
+  const totalEnrollments = await getExactCount(db.from('enrollments'), 'admin_total_enrollments');
+  const activeEnrollments = await getExactCount(db.from('enrollments').eq('status', 'active'), 'admin_active_enrollments');
 
-  // Get payment statistics
-  const paymentRows = await getRows<PaymentRow>(db.from('payments').select('status,amount'), 'admin_payment_rows');
+  // 4. Payment statistics
+  const paymentRows = await getRows<PaymentRow>(
+    db.from('payments').select('status,amount'),
+    'admin_payment_rows'
+  );
   const paymentStatsMap: Record<string, { count: number; totalAmount: number }> = {};
   for (const p of paymentRows) {
     const key = p.status ?? 'unknown';
@@ -530,17 +521,17 @@ export const getAdminDashboard = asyncHandler(async (req: Request, res: Response
   const verifiedPaymentStat = paymentStatsMap['verified'] || { count: 0, totalAmount: 0 };
   const pendingPaymentStat = paymentStatsMap['pending'] || { count: 0, totalAmount: 0 };
 
-  // Get hostel statistics
-  const totalHostels = await getExactCount(db.from('hostels').select('id', { count: 'exact', head: true }), 'admin_total_hostels');
-  const totalHostelApplications = await getExactCount(db.from('hostel_applications').select('id', { count: 'exact', head: true }), 'admin_total_hostel_applications');
-  const approvedApplications = await getExactCount(db.from('hostel_applications').select('id', { count: 'exact', head: true }).eq('status', 'approved'), 'admin_approved_applications');
+  // 5. Hostel statistics
+  const totalHostels = await getExactCount(db.from('hostels'), 'admin_total_hostels');
+  const totalHostelApplications = await getExactCount(db.from('hostel_applications'), 'admin_total_hostel_applications');
+  const approvedApplications = await getExactCount(db.from('hostel_applications').eq('status', 'approved'), 'admin_approved_applications');
 
-  // Get assignment and quiz statistics
-  const totalAssignments = await getExactCount(db.from('assignments').select('id', { count: 'exact', head: true }), 'admin_total_assignments');
-  const totalQuizzes = await getExactCount(db.from('quizzes').select('id', { count: 'exact', head: true }), 'admin_total_quizzes');
-  const totalSubmissions = await getExactCount(db.from('submissions').select('id', { count: 'exact', head: true }), 'admin_total_submissions');
+  // 6. Academic statistics
+  const totalAssignments = await getExactCount(db.from('assignments'), 'admin_total_assignments');
+  const totalQuizzes = await getExactCount(db.from('quizzes'), 'admin_total_quizzes');
+  const totalSubmissions = await getExactCount(db.from('submissions'), 'admin_total_submissions');
 
-  // Get recent activities
+  // 7. Recent activities
   const recentUsers = await getRows<ProfileRow>(
     db
       .from('profiles')
@@ -559,14 +550,14 @@ export const getAdminDashboard = asyncHandler(async (req: Request, res: Response
     'admin_recent_payments'
   );
 
-  // Get unread notifications
+  // 8. Unread notifications
   const unreadNotifications = await getExactCount(
     db.from('notifications').eq('user_id', userId).is('read_at', null),
     'admin_unread_notifications'
   );
 
   res.json(
-    ApiResponse.success('Dashboard data fetched successfully', {
+    ApiResponse.success('Admin dashboard fetched successfully', {
       users: {
         total: totalUsers,
         students: totalStudents,
