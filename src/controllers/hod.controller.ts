@@ -116,7 +116,7 @@ const ensureDepartmentForHod = async (db: ReturnType<typeof supabaseAdmin>, hodI
       .eq('hod_id', hodId)
       .limit(1)
   );
-  if (!department) {
+  if (!department || !department.id) {
     throw ApiError.forbidden('You are not assigned to any department');
   }
   return department;
@@ -374,13 +374,15 @@ export const updateHodDepartmentProfile = asyncHandler(async (req: Request, res:
 });
 
 const collectDepartmentStats = async (db: ReturnType<typeof supabaseAdmin>, departmentId: string) => {
+  if (!departmentId) throw ApiError.internal('Invalid department id');
+
   const [studentCount, staffCount, courseRows] = await Promise.all([
     getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('department_id', departmentId)),
     getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'lecturer').eq('department_id', departmentId)),
     getRows<CourseRow>(db.from('courses').select('id').eq('department_id', departmentId)),
   ]);
 
-  const courseIds = courseRows.map((course) => course.id);
+  const courseIds = (courseRows || []).map((course) => course.id).filter((id): id is string => typeof id === 'string' && id.length > 0);
 
   const [activeEnrollments, pendingResults] = await Promise.all([
     courseIds.length
