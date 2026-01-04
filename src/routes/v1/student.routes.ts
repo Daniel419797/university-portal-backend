@@ -43,7 +43,8 @@ import {
 
 const router = Router();
 
-router.use(authenticate, authorizeRoles('student'));
+// Only apply the student auth/role middleware to paths under /students
+router.use('/students', authenticate, authorizeRoles('student'));
 
 // Courses & materials
 router.get('/students/courses', listCourses);
