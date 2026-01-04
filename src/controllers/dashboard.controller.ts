@@ -58,12 +58,46 @@ interface ProfileRow {
   created_at?: string;
 }
 
+interface Filter {
+  column: string;
+  value: any;
+  operator?: 'eq' | 'in' | 'is' | 'gte' | 'lte' | 'gt' | 'lt';
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Safe count helper — accepts a query builder (NOT a promise)
+// Refactored count helper — builds query from scratch with filters
 // ─────────────────────────────────────────────────────────────────────────────
-const getExactCount = async (builder: any, label: string): Promise<number> => {
+const getExactCount = async (
+  db: any,
+  tableName: string,
+  filters: Filter[],
+  label: string
+): Promise<number> => {
   try {
-    const { count, error } = await builder.select('*', { count: 'exact', head: true });
+    let query = db.from(tableName).select('*', { count: 'exact', head: true });
+    
+    // Apply filters dynamically
+    for (const filter of filters) {
+      const operator = filter.operator || 'eq';
+      if (operator === 'eq') {
+        query = query.eq(filter.column, filter.value);
+      } else if (operator === 'in') {
+        query = query.in(filter.column, filter.value);
+      } else if (operator === 'is') {
+        query = query.is(filter.column, filter.value);
+      } else if (operator === 'gte') {
+        query = query.gte(filter.column, filter.value);
+      } else if (operator === 'lte') {
+        query = query.lte(filter.column, filter.value);
+      } else if (operator === 'gt') {
+        query = query.gt(filter.column, filter.value);
+      } else if (operator === 'lt') {
+        query = query.lt(filter.column, filter.value);
+      }
+    }
+    
+    const { count, error } = await query;
+    
     if (error) {
       logger.error(`Count query failed [${label}]`, { message: error.message, details: error });
       return 0;
@@ -96,7 +130,7 @@ const getRows = async <T>(builder: any, label: string): Promise<T[]> => {
 // Student Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 export const getStudentDashboard = asyncHandler(async (req: Request, res: Response) => {
-  const db = supabaseAdmin() as any;
+  const db = supabaseAdmin();
   const userId = req.user?.userId;
 
   if (!userId) {
@@ -105,7 +139,12 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
 
   // 1. Enrolled courses count
   const enrolledCourses = await getExactCount(
-    db.from('enrollments').eq('student_id', userId).eq('status', 'active'),
+    db,
+    'enrollments',
+    [
+      { column: 'student_id', value: userId },
+      { column: 'status', value: 'active' }
+    ],
     'student_enrolled_courses'
   );
 
@@ -195,7 +234,12 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
 
   // 8. Unread notifications
   const unreadNotifications = await getExactCount(
-    db.from('notifications').eq('user_id', userId).is('read_at', null),
+    db,
+    'notifications',
+    [
+      { column: 'user_id', value: userId },
+      { column: 'read_at', value: null, operator: 'is' }
+    ],
     'student_unread_notifications'
   );
 
@@ -222,7 +266,7 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
 // Lecturer Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 export const getLecturerDashboard = asyncHandler(async (req: Request, res: Response) => {
-  const db = supabaseAdmin() as any;
+  const db = supabaseAdmin();
   const userId = req.user?.userId;
 
   if (!userId) {
@@ -231,7 +275,12 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
 
   // 1. Number of courses assigned to this lecturer
   const assignedCourses = await getExactCount(
-    db.from('courses').eq('lecturer_id', userId).eq('is_active', true),
+    db,
+    'courses',
+    [
+      { column: 'lecturer_id', value: userId },
+      { column: 'is_active', value: true }
+    ],
     'lecturer_assigned_courses'
   );
 
@@ -246,7 +295,12 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
   // 3. Total active students in lecturer's courses
   const totalStudents = courseIds.length > 0
     ? await getExactCount(
-        db.from('enrollments').in('course_id', courseIds).eq('status', 'active'),
+        db,
+        'enrollments',
+        [
+          { column: 'course_id', value: courseIds, operator: 'in' },
+          { column: 'status', value: 'active' }
+        ],
         'lecturer_total_students'
       )
     : 0;
@@ -264,7 +318,12 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
   // 5. Pending submissions to grade
   const pendingSubmissions = assignmentIds.length > 0
     ? await getExactCount(
-        db.from('submissions').in('assignment_id', assignmentIds).is('grade', null),
+        db,
+        'submissions',
+        [
+          { column: 'assignment_id', value: assignmentIds, operator: 'in' },
+          { column: 'grade', value: null, operator: 'is' }
+        ],
         'lecturer_pending_submissions'
       )
     : 0;
@@ -272,7 +331,9 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
   // 6. Total quizzes
   const pendingQuizzes = courseIds.length > 0
     ? await getExactCount(
-        db.from('quizzes').in('course_id', courseIds),
+        db,
+        'quizzes',
+        [{ column: 'course_id', value: courseIds, operator: 'in' }],
         'lecturer_quizzes'
       )
     : 0;
@@ -291,7 +352,12 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
   const recentCoursesWithStats = await Promise.all(
     recentCoursesRaw.map(async (course) => {
       const studentCount = await getExactCount(
-        db.from('enrollments').eq('course_id', course.id).eq('status', 'active'),
+        db,
+        'enrollments',
+        [
+          { column: 'course_id', value: course.id },
+          { column: 'status', value: 'active' }
+        ],
         `lecturer_recent_course_${course.id}_students`
       );
       return {
@@ -318,7 +384,12 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
 
   // 9. Unread notifications
   const unreadNotifications = await getExactCount(
-    db.from('notifications').eq('user_id', userId).is('read_at', null),
+    db,
+    'notifications',
+    [
+      { column: 'user_id', value: userId },
+      { column: 'read_at', value: null, operator: 'is' }
+    ],
     'lecturer_unread_notifications'
   );
 
@@ -348,7 +419,7 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
 // HOD Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 export const getHODDashboard = asyncHandler(async (req: Request, res: Response) => {
-  const db = supabaseAdmin() as any;
+  const db = supabaseAdmin();
   const userId = req.user?.userId;
 
   if (!userId) {
@@ -367,38 +438,58 @@ export const getHODDashboard = asyncHandler(async (req: Request, res: Response) 
 
   // 2. Department statistics
   const totalStudents = await getExactCount(
-    db.from('profiles').eq('role', 'student').eq('department', user.department),
+    db,
+    'profiles',
+    [
+      { column: 'role', value: 'student' },
+      { column: 'department', value: user.department }
+    ],
     'hod_total_students'
   );
 
   const totalStaff = await getExactCount(
-    db.from('profiles').eq('role', 'lecturer').eq('department', user.department),
+    db,
+    'profiles',
+    [
+      { column: 'role', value: 'lecturer' },
+      { column: 'department', value: user.department }
+    ],
     'hod_total_staff'
   );
 
   const totalCourses = await getExactCount(
-    db.from('courses').eq('department', user.department),
+    db,
+    'courses',
+    [{ column: 'department', value: user.department }],
     'hod_total_courses'
   );
 
   const activeLecturers = await getExactCount(
-    db.from('profiles')
-      .eq('role', 'lecturer')
-      .eq('department', user.department)
-      .eq('is_active', true),
+    db,
+    'profiles',
+    [
+      { column: 'role', value: 'lecturer' },
+      { column: 'department', value: user.department },
+      { column: 'is_active', value: true }
+    ],
     'hod_active_lecturers'
   );
 
   // 3. Pending approvals
   const pendingResults = await getExactCount(
-    db.from('results')
-      .eq('approved_by_hod', false)
-      .eq('is_published', false),
+    db,
+    'results',
+    [
+      { column: 'approved_by_hod', value: false },
+      { column: 'is_published', value: false }
+    ],
     'hod_pending_results'
   );
 
   const pendingClearances = await getExactCount(
-    db.from('clearance').eq('overall_status', 'in-progress'),
+    db,
+    'clearance',
+    [{ column: 'overall_status', value: 'in-progress' }],
     'hod_pending_clearances'
   );
 
@@ -422,7 +513,12 @@ export const getHODDashboard = asyncHandler(async (req: Request, res: Response) 
 
   // 5. Unread notifications
   const unreadNotifications = await getExactCount(
-    db.from('notifications').eq('user_id', userId).is('read_at', null),
+    db,
+    'notifications',
+    [
+      { column: 'user_id', value: userId },
+      { column: 'read_at', value: null, operator: 'is' }
+    ],
     'hod_unread_notifications'
   );
 
@@ -455,7 +551,7 @@ export const getHODDashboard = asyncHandler(async (req: Request, res: Response) 
 // Bursary Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 export const getBursaryDashboard = asyncHandler(async (req: Request, res: Response) => {
-  const db = supabaseAdmin() as any;
+  const db = supabaseAdmin();
   const userId = req.user?.userId;
 
   if (!userId) {
@@ -463,20 +559,26 @@ export const getBursaryDashboard = asyncHandler(async (req: Request, res: Respon
   }
 
   // 1. Payment statistics
-  const totalPayments = await getExactCount(db.from('payments'), 'bursary_total_payments');
+  const totalPayments = await getExactCount(db, 'payments', [], 'bursary_total_payments');
 
   const verifiedPayments = await getExactCount(
-    db.from('payments').eq('status', 'verified'),
+    db,
+    'payments',
+    [{ column: 'status', value: 'verified' }],
     'bursary_verified_payments'
   );
 
   const pendingPayments = await getExactCount(
-    db.from('payments').eq('status', 'pending'),
+    db,
+    'payments',
+    [{ column: 'status', value: 'pending' }],
     'bursary_pending_payments'
   );
 
   const failedPayments = await getExactCount(
-    db.from('payments').eq('status', 'failed'),
+    db,
+    'payments',
+    [{ column: 'status', value: 'failed' }],
     'bursary_failed_payments'
   );
 
@@ -488,7 +590,9 @@ export const getBursaryDashboard = asyncHandler(async (req: Request, res: Respon
   const paidAmount = verifiedRows.reduce((sum: number, p) => sum + (Number(p.amount) || 0), 0);
 
   const totalStudents = await getExactCount(
-    db.from('profiles').eq('role', 'student'),
+    db,
+    'profiles',
+    [{ column: 'role', value: 'student' }],
     'bursary_total_students'
   );
   const expectedRevenue = totalStudents * 150000; // Assuming 150,000 per student
@@ -510,7 +614,12 @@ export const getBursaryDashboard = asyncHandler(async (req: Request, res: Respon
 
   // 5. Unread notifications
   const unreadNotifications = await getExactCount(
-    db.from('notifications').eq('user_id', userId).is('read_at', null),
+    db,
+    'notifications',
+    [
+      { column: 'user_id', value: userId },
+      { column: 'read_at', value: null, operator: 'is' }
+    ],
     'bursary_unread_notifications'
   );
 
@@ -551,7 +660,7 @@ export const getBursaryDashboard = asyncHandler(async (req: Request, res: Respon
 // Admin Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 export const getAdminDashboard = asyncHandler(async (req: Request, res: Response) => {
-  const db = supabaseAdmin() as any;
+  const db = supabaseAdmin();
   const userId = req.user?.userId;
 
   if (!userId) {
@@ -559,19 +668,49 @@ export const getAdminDashboard = asyncHandler(async (req: Request, res: Response
   }
 
   // 1. User statistics
-  const totalUsers = await getExactCount(db.from('profiles'), 'admin_total_users');
-  const totalStudents = await getExactCount(db.from('profiles').eq('role', 'student'), 'admin_total_students');
-  const totalLecturers = await getExactCount(db.from('profiles').eq('role', 'lecturer'), 'admin_total_lecturers');
-  const totalAdmins = await getExactCount(db.from('profiles').eq('role', 'admin'), 'admin_total_admins');
-  const activeUsers = await getExactCount(db.from('profiles').eq('is_active', true), 'admin_active_users');
+  const totalUsers = await getExactCount(db, 'profiles', [], 'admin_total_users');
+  const totalStudents = await getExactCount(
+    db,
+    'profiles',
+    [{ column: 'role', value: 'student' }],
+    'admin_total_students'
+  );
+  const totalLecturers = await getExactCount(
+    db,
+    'profiles',
+    [{ column: 'role', value: 'lecturer' }],
+    'admin_total_lecturers'
+  );
+  const totalAdmins = await getExactCount(
+    db,
+    'profiles',
+    [{ column: 'role', value: 'admin' }],
+    'admin_total_admins'
+  );
+  const activeUsers = await getExactCount(
+    db,
+    'profiles',
+    [{ column: 'is_active', value: true }],
+    'admin_active_users'
+  );
 
   // 2. Course statistics
-  const totalCourses = await getExactCount(db.from('courses'), 'admin_total_courses');
-  const activeCourses = await getExactCount(db.from('courses').eq('is_active', true), 'admin_active_courses');
+  const totalCourses = await getExactCount(db, 'courses', [], 'admin_total_courses');
+  const activeCourses = await getExactCount(
+    db,
+    'courses',
+    [{ column: 'is_active', value: true }],
+    'admin_active_courses'
+  );
 
   // 3. Enrollment statistics
-  const totalEnrollments = await getExactCount(db.from('enrollments'), 'admin_total_enrollments');
-  const activeEnrollments = await getExactCount(db.from('enrollments').eq('status', 'active'), 'admin_active_enrollments');
+  const totalEnrollments = await getExactCount(db, 'enrollments', [], 'admin_total_enrollments');
+  const activeEnrollments = await getExactCount(
+    db,
+    'enrollments',
+    [{ column: 'status', value: 'active' }],
+    'admin_active_enrollments'
+  );
 
   // 4. Payment statistics
   const paymentRows = await getRows<PaymentRow>(
@@ -589,14 +728,24 @@ export const getAdminDashboard = asyncHandler(async (req: Request, res: Response
   const pendingPaymentStat = paymentStatsMap['pending'] || { count: 0, totalAmount: 0 };
 
   // 5. Hostel statistics
-  const totalHostels = await getExactCount(db.from('hostels'), 'admin_total_hostels');
-  const totalHostelApplications = await getExactCount(db.from('hostel_applications'), 'admin_total_hostel_applications');
-  const approvedApplications = await getExactCount(db.from('hostel_applications').eq('status', 'approved'), 'admin_approved_applications');
+  const totalHostels = await getExactCount(db, 'hostels', [], 'admin_total_hostels');
+  const totalHostelApplications = await getExactCount(
+    db,
+    'hostel_applications',
+    [],
+    'admin_total_hostel_applications'
+  );
+  const approvedApplications = await getExactCount(
+    db,
+    'hostel_applications',
+    [{ column: 'status', value: 'approved' }],
+    'admin_approved_applications'
+  );
 
   // 6. Academic statistics
-  const totalAssignments = await getExactCount(db.from('assignments'), 'admin_total_assignments');
-  const totalQuizzes = await getExactCount(db.from('quizzes'), 'admin_total_quizzes');
-  const totalSubmissions = await getExactCount(db.from('submissions'), 'admin_total_submissions');
+  const totalAssignments = await getExactCount(db, 'assignments', [], 'admin_total_assignments');
+  const totalQuizzes = await getExactCount(db, 'quizzes', [], 'admin_total_quizzes');
+  const totalSubmissions = await getExactCount(db, 'submissions', [], 'admin_total_submissions');
 
   // 7. Recent activities
   const recentUsers = await getRows<ProfileRow>(
@@ -619,7 +768,12 @@ export const getAdminDashboard = asyncHandler(async (req: Request, res: Response
 
   // 8. Unread notifications
   const unreadNotifications = await getExactCount(
-    db.from('notifications').eq('user_id', userId).is('read_at', null),
+    db,
+    'notifications',
+    [
+      { column: 'user_id', value: userId },
+      { column: 'read_at', value: null, operator: 'is' }
+    ],
     'admin_unread_notifications'
   );
 
@@ -678,4 +832,3 @@ export const getAdminDashboard = asyncHandler(async (req: Request, res: Response
     })
   );
 });
-
