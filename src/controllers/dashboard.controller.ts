@@ -198,9 +198,10 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
 // @route   GET /api/v1/lecturers/dashboard
 // @access  Private (Lecturer)
 export const getLecturerDashboard = asyncHandler(async (req: Request, res: Response) => {
-  const db = supabaseAdmin();
-  const userId = req.user?.userId;
-  if (!userId) throw new Error('Unauthorized');
+  try {
+    const db = supabaseAdmin();
+    const userId = req.user?.userId;
+    if (!userId) throw new Error('Unauthorized');
 
   const assignedCourses = await getExactCount(
     db.from('courses').select('id', { count: 'exact', head: true }).eq('lecturer', userId)
@@ -307,6 +308,20 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
       unreadNotifications
     })
   );
+  } catch (err) {
+    // Log full error for debugging in production
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const logger = require('../config/logger').default;
+      logger.error('getLecturerDashboard failed', { error: err instanceof Error ? err.stack : err });
+      // Also print to stdout
+      // eslint-disable-next-line no-console
+      console.error('getLecturerDashboard failed', err instanceof Error ? err.stack : err);
+    } catch (e) {
+      // ignore logging failures
+    }
+    throw err;
+  }
 });
 
 // @desc    Get HOD Dashboard
