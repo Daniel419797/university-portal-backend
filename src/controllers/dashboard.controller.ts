@@ -37,17 +37,29 @@ type QuizRow = { id: string; title?: string; course?: string };
 const getExactCount = async (
   query: unknown
 ): Promise<number> => {
-  const { count, error } = await (query as unknown as Promise<{ count: number | null; error: { message?: string } | null }>);
-  if (error) throw new Error(error.message);
-  return count ?? 0;
+  try {
+    const result = await (query as unknown as Promise<{ count: number | null; error: { message?: string } | null }>);
+    if (!result) return 0;
+    const { count, error } = result as { count?: number | null; error?: { message?: string } | null };
+    if (error) throw new Error(error.message ?? JSON.stringify(error));
+    return count ?? 0;
+  } catch (e) {
+    throw new Error(`getExactCount failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
 };
 
 const getRows = async <T>(
   query: unknown
 ): Promise<T[]> => {
-  const { data, error } = await (query as unknown as Promise<{ data: T[] | null; error: { message?: string } | null }>);
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  try {
+    const result = await (query as unknown as Promise<{ data: T[] | null; error: { message?: string } | null }>);
+    if (!result) return [];
+    const { data, error } = result as { data?: T[] | null; error?: { message?: string } | null };
+    if (error) throw new Error(error.message ?? JSON.stringify(error));
+    return data ?? [];
+  } catch (e) {
+    throw new Error(`getRows failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
 };
 
 // @desc    Get Student Dashboard
