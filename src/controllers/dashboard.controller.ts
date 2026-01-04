@@ -50,7 +50,7 @@ interface PaymentRow {
 
 interface ProfileRow {
   id: string;
-  department?: string;
+  department_id?: string;
   role?: string;
   first_name?: string;
   last_name?: string;
@@ -428,11 +428,11 @@ export const getHODDashboard = asyncHandler(async (req: Request, res: Response) 
 
   // 1. Get user's department
   const userRows = await getRows<ProfileRow>(
-    db.from('profiles').select('id,department').eq('id', userId).limit(1),
+    db.from('profiles').select('id,department_id').eq('id', userId).limit(1),
     'hod_user_department'
   );
   const user = userRows[0];
-  if (!user || !user.department) {
+  if (!user || !user.department_id) {
     throw ApiError.badRequest('Department not found for user');
   }
 
@@ -442,7 +442,7 @@ export const getHODDashboard = asyncHandler(async (req: Request, res: Response) 
     'profiles',
     [
       { column: 'role', value: 'student' },
-      { column: 'department', value: user.department }
+      { column: 'department_id', value: user.department_id }
     ],
     'hod_total_students'
   );
@@ -452,7 +452,7 @@ export const getHODDashboard = asyncHandler(async (req: Request, res: Response) 
     'profiles',
     [
       { column: 'role', value: 'lecturer' },
-      { column: 'department', value: user.department }
+      { column: 'department_id', value: user.department_id }
     ],
     'hod_total_staff'
   );
@@ -460,7 +460,7 @@ export const getHODDashboard = asyncHandler(async (req: Request, res: Response) 
   const totalCourses = await getExactCount(
     db,
     'courses',
-    [{ column: 'department', value: user.department }],
+    [{ column: 'department_id', value: user.department_id }],
     'hod_total_courses'
   );
 
@@ -469,7 +469,7 @@ export const getHODDashboard = asyncHandler(async (req: Request, res: Response) 
     'profiles',
     [
       { column: 'role', value: 'lecturer' },
-      { column: 'department', value: user.department },
+      { column: 'department_id', value: user.department_id },
       { column: 'is_active', value: true }
     ],
     'hod_active_lecturers'
@@ -495,7 +495,7 @@ export const getHODDashboard = asyncHandler(async (req: Request, res: Response) 
 
   // 4. Recent enrollments
   const departmentCourses = await getRows<CourseRow>(
-    db.from('courses').select('id').eq('department', user.department),
+    db.from('courses').select('id').eq('department_id', user.department_id),
     'hod_department_courses'
   );
   const departmentCourseIds = departmentCourses.map((c) => c.id);

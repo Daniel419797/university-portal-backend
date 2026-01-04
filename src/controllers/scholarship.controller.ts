@@ -54,7 +54,7 @@ export const getAvailableScholarships = asyncHandler(async (req: Request, res: R
 
   const { data: user, error: userErr } = await db
     .from('profiles')
-    .select('id, department, level')
+    .select('id, department_id, level')
     .eq('id', userId)
     .maybeSingle();
   if (userErr) throw ApiError.internal(`Failed to fetch user profile: ${userErr.message}`);
@@ -74,7 +74,7 @@ export const getAvailableScholarships = asyncHandler(async (req: Request, res: R
     const criteria = (s as ScholarshipRow).eligibility_criteria || {};
     if (criteria.minCGPA !== undefined && cgpa < (criteria.minCGPA || 0)) return false;
     if (criteria.levels && criteria.levels.length > 0 && user.level && !criteria.levels.includes(user.level)) return false;
-    if (criteria.departments && criteria.departments.length > 0 && user.department && !criteria.departments.includes(user.department)) return false;
+    if (criteria.departments && criteria.departments.length > 0 && user.department_id && !criteria.departments.includes(user.department_id)) return false;
     return true;
   });
 
@@ -203,7 +203,7 @@ export const getAllApplications = asyncHandler(async (req: Request, res: Respons
 
   let query = db
     .from('scholarship_applications')
-    .select('*, scholarship:scholarships(name, amount), student:profiles(id, first_name, last_name, email, matric_number, department, level)');
+    .select('*, scholarship:scholarships(name, amount), student:profiles(id, first_name, last_name, email, student_id, department_id, level)');
   if (status) query = query.eq('status', status);
   if (scholarshipId) query = query.eq('scholarship_id', scholarshipId);
 
@@ -224,8 +224,8 @@ export const getAllApplications = asyncHandler(async (req: Request, res: Respons
       id: app.student?.id,
       name: `${app.student?.first_name} ${app.student?.last_name}`,
       email: app.student?.email,
-      matricNumber: app.student?.matric_number,
-      department: app.student?.department,
+      matricNumber: app.student?.student_id,
+      department: app.student?.department_id,
       level: app.student?.level,
       },
       reason: app.reason,
@@ -256,7 +256,7 @@ export const getApplicationDetails = asyncHandler(async (req: Request, res: Resp
 
   const { data: application, error } = await db
     .from('scholarship_applications')
-    .select('*, scholarship:scholarships(name, amount, eligibility_criteria), student:profiles(id, first_name, last_name, email, matric_number, department, level, phone_number), reviewedBy:profiles(first_name, last_name)')
+    .select('*, scholarship:scholarships(name, amount, eligibility_criteria), student:profiles(id, first_name, last_name, email, student_id, department_id, level, phone_number), reviewedBy:profiles(first_name, last_name)')
     .eq('id', id)
     .maybeSingle();
   if (error) throw ApiError.internal(`Failed to fetch application: ${error.message}`);
@@ -283,8 +283,8 @@ export const getApplicationDetails = asyncHandler(async (req: Request, res: Resp
       studentInfo: {
         name: `${application.student?.first_name} ${application.student?.last_name}`,
         email: application.student?.email,
-        matricNumber: application.student?.matric_number,
-        department: application.student?.department,
+        matricNumber: application.student?.student_id,
+        department: application.student?.department_id,
         level: application.student?.level,
         phone: application.student?.phone_number,
       },

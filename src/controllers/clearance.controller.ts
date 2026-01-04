@@ -61,7 +61,7 @@ type DocumentRequest = {
 
 type ClearanceRecord = {
   id: string;
-  student: string;
+  student_id: string;
   academic_year: string;
   semester: string;
   departments: DepartmentEntry[];
@@ -74,8 +74,8 @@ const ensureClearanceRecord = async (studentId: string): Promise<ClearanceRecord
   const db = supabaseAdmin();
   const { data: existing, error } = await db
     .from('clearance')
-    .select('id, student, academic_year, semester, departments, document_requests, overall_status, completed_at')
-    .eq('student', studentId)
+    .select('id, student_id, academic_year, semester, departments, document_requests, overall_status, completed_at')
+    .eq('student_id', studentId)
     .eq('academic_year', getCurrentAcademicYear())
     .maybeSingle();
   if (error) throw ApiError.internal(`Failed to read clearance: ${error.message}`);
@@ -85,7 +85,7 @@ const ensureClearanceRecord = async (studentId: string): Promise<ClearanceRecord
   const { data: inserted, error: insertErr } = await db
     .from('clearance')
     .insert({
-      student: studentId,
+      student_id: studentId,
       academic_year: getCurrentAcademicYear(),
       semester: 'Second Semester',
       departments: initialDepartments,
@@ -169,7 +169,7 @@ export const getAllClearanceRequests = asyncHandler(async (req: Request, res: Re
   const from = (pageNum - 1) * limitNum;
   const to = from + limitNum - 1;
 
-  let query = db.from('clearance').select('id, student, academic_year, semester, departments, overall_status, completed_at');
+  let query = db.from('clearance').select('id, student_id, academic_year, semester, departments, overall_status, completed_at');
   if (status) query = query.eq('overall_status', String(status));
   if (department) query = query.contains('departments', [{ name: String(department) }]);
   query = query.order('academic_year', { ascending: false }).range(from, to);
@@ -203,7 +203,7 @@ export const getClearanceDetails = asyncHandler(async (req: Request, res: Respon
   const db = supabaseAdmin();
   const { data: clearance, error } = await db
     .from('clearance')
-    .select('id, student, academic_year, semester, departments, document_requests, overall_status, completed_at')
+    .select('id, student_id, academic_year, semester, departments, document_requests, overall_status, completed_at')
     .eq('id', id)
     .maybeSingle();
   if (error) throw ApiError.internal(`Failed to fetch clearance: ${error.message}`);
@@ -223,7 +223,7 @@ export const updateDepartmentStatus = asyncHandler(async (req: Request, res: Res
   const db = supabaseAdmin();
   const { data: clearance, error } = await db
     .from('clearance')
-    .select('id, student, departments, overall_status, completed_at')
+    .select('id, student_id, departments, overall_status, completed_at')
     .eq('id', id)
     .maybeSingle();
   if (error) throw ApiError.internal(`Failed to fetch clearance: ${error.message}`);
@@ -246,7 +246,7 @@ export const updateDepartmentStatus = asyncHandler(async (req: Request, res: Res
   if (updErr) throw ApiError.internal(`Failed to update clearance: ${updErr.message}`);
 
   await notificationService.createNotification(
-    (clearance as ClearanceRecord).student,
+    (clearance as ClearanceRecord).student_id,
     'info',
     'Clearance Update',
     `${departmentName} department ${status === 'approved' ? 'approved' : 'updated'} your clearance status`,
@@ -268,7 +268,7 @@ export const approveClearance = asyncHandler(async (req: Request, res: Response)
 
   if (!userId) throw ApiError.unauthorized('User not authenticated');
   const db = supabaseAdmin();
-  const { data: clearance, error } = await db.from('clearance').select('id, student, departments').eq('id', id).maybeSingle();
+  const { data: clearance, error } = await db.from('clearance').select('id, student_id, departments').eq('id', id).maybeSingle();
   if (error) throw ApiError.internal(`Failed to fetch clearance: ${error.message}`);
   if (!clearance) throw ApiError.notFound('Clearance request not found');
 
@@ -287,7 +287,7 @@ export const approveClearance = asyncHandler(async (req: Request, res: Response)
   if (updErr) throw ApiError.internal(`Failed to approve clearance: ${updErr.message}`);
 
   await notificationService.createNotification(
-    (clearance as ClearanceRecord).student,
+    (clearance as ClearanceRecord).student_id,
     'success',
     'Clearance Completed',
     'Congratulations! Your clearance process has been completed successfully.',
@@ -309,7 +309,7 @@ export const rejectClearance = asyncHandler(async (req: Request, res: Response) 
 
   if (!userId) throw ApiError.unauthorized('User not authenticated');
   const db = supabaseAdmin();
-  const { data: clearance, error } = await db.from('clearance').select('id, student, departments').eq('id', id).maybeSingle();
+  const { data: clearance, error } = await db.from('clearance').select('id, student_id, departments').eq('id', id).maybeSingle();
   if (error) throw ApiError.internal(`Failed to fetch clearance: ${error.message}`);
   if (!clearance) throw ApiError.notFound('Clearance request not found');
 
@@ -329,7 +329,7 @@ export const rejectClearance = asyncHandler(async (req: Request, res: Response) 
   if (updErr) throw ApiError.internal(`Failed to reject clearance: ${updErr.message}`);
 
   await notificationService.createNotification(
-    (clearance as ClearanceRecord).student,
+    (clearance as ClearanceRecord).student_id,
     'warning',
     'Clearance Update',
     `Your clearance request was rejected${reason ? `: ${reason}` : ''}`,

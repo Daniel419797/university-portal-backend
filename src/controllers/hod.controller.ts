@@ -19,7 +19,7 @@ export const getHodStaff = asyncHandler(async (req: Request, res: Response) => {
     .from('profiles')
     .select('id,first_name,last_name,email,phone_number,is_active,created_at', { count: 'exact' })
     .eq('role', 'lecturer')
-    .eq('department', department.id);
+    .eq('department_id', department.id);
 
   if (search) {
     const q = `%${search}%`;
@@ -51,7 +51,7 @@ export const getHodAnalytics = asyncHandler(async (req: Request, res: Response) 
   if (!userId) throw ApiError.unauthorized('Unauthorized');
   const department = await ensureDepartmentForHod(db, userId);
   const stats = await collectDepartmentStats(db, department.id);
-  const courses = await getRows<CourseRow>(db.from('courses').select('id').eq('department', department.id));
+  const courses = await getRows<CourseRow>(db.from('courses').select('id').eq('department_id', department.id));
   const courseIds = courses.map((course) => course.id);
 
   if (!courseIds.length) {
@@ -65,8 +65,8 @@ export const getHodAnalytics = asyncHandler(async (req: Request, res: Response) 
   }
 
   const [publishedResults, passedResults] = await Promise.all([
-    getExactCount(db.from('results').select('id', { count: 'exact', head: true }).in('course', courseIds).eq('is_published', true)),
-    getExactCount(db.from('results').select('id', { count: 'exact', head: true }).in('course', courseIds).eq('is_published', true).neq('grade', 'F')),
+    getExactCount(db.from('results').select('id', { count: 'exact', head: true }).in('course_id', courseIds).eq('is_published', true)),
+    getExactCount(db.from('results').select('id', { count: 'exact', head: true }).in('course_id', courseIds).eq('is_published', true).neq('grade', 'F')),
   ]);
 
   const passRate = publishedResults
@@ -84,11 +84,11 @@ export const getHodAnalytics = asyncHandler(async (req: Request, res: Response) 
   );
 });
 
-type DepartmentRow = { id: string; name?: string; faculty?: string; is_active?: boolean; hod?: string };
-type ProfileRow = { id: string; role: string; first_name: string; last_name: string; email: string; student_id?: string; level?: string; phone_number?: string; is_active?: boolean; department?: string; created_at?: string };
-type CourseRow = { id: string; code: string; title: string; level?: string; semester?: string; credits?: number; schedule?: string; department?: string; lecturer?: string };
-type ResultRow = { id: string; course: string; total_score?: number; grade_points?: number; grade?: string; is_published?: boolean; approved_by_hod?: boolean; course_details?: { id: string; credits?: number; department?: string } };
-type EnrollmentRow = { id: string; student: string; course: string; status?: string };
+type DepartmentRow = { id: string; name?: string; faculty?: string; is_active?: boolean; hod_id?: string };
+type ProfileRow = { id: string; role: string; first_name: string; last_name: string; email: string; student_id?: string; level?: string; phone_number?: string; is_active?: boolean; department_id?: string; created_at?: string };
+type CourseRow = { id: string; code: string; title: string; level?: string; semester?: string; credits?: number; schedule?: string; department_id?: string; lecturer_id?: string };
+type ResultRow = { id: string; course_id: string; total_score?: number; grade_points?: number; grade?: string; is_published?: boolean; approved_by_hod?: boolean; course_details?: { id: string; credits?: number; department_id?: string } };
+type EnrollmentRow = { id: string; student_id: string; course_id: string; status?: string };
 
 const getExactCount = async (query: unknown): Promise<number> => {
   const { count, error } = await (query as unknown as Promise<{ count: number | null; error: { message?: string } | null }>);
@@ -152,7 +152,7 @@ export const getHodStudents = asyncHandler(async (req: Request, res: Response) =
     .from('profiles')
     .select('id,first_name,last_name,email,student_id,level,phone_number,is_active,created_at', { count: 'exact' })
     .eq('role', 'student')
-    .eq('department', department.id);
+    .eq('department_id', department.id);
 
   if (level) base = base.eq('level', level);
   if (search) {
@@ -188,22 +188,22 @@ export const getHodStudentProfile = asyncHandler(async (req: Request, res: Respo
   const student = await getSingle<ProfileRow>(
     db
       .from('profiles')
-      .select('id,first_name,last_name,email,role,department')
+      .select('id,first_name,last_name,email,role,department_id')
       .eq('id', req.params.id)
       .eq('role', 'student')
-      .eq('department', department.id)
+      .eq('department_id', department.id)
       .limit(1)
   );
 
   if (!student) throw ApiError.notFound('Student not found in your department');
 
   const [enrollments, results] = await Promise.all([
-    getRows<EnrollmentRow>(db.from('enrollments').select('id,course,status').eq('student', student.id)),
+    getRows<EnrollmentRow>(db.from('enrollments').select('id,course_id,status').eq('student_id', student.id)),
     getRows<ResultRow>(
       db
         .from('results')
         .select('id,total_score,grade_points,is_published,course_details:courses(id,credits)')
-        .eq('student', student.id)
+        .eq('student_id', student.id)
     ),
   ]);
 
@@ -238,10 +238,10 @@ export const getHodStaffProfile = asyncHandler(async (req: Request, res: Respons
   const staffMember = await getSingle<ProfileRow>(
     db
       .from('profiles')
-      .select('id,first_name,last_name,email,role,department')
+      .select('id,first_name,last_name,email,role,department_id')
       .eq('id', req.params.id)
       .eq('role', 'lecturer')
-      .eq('department', department.id)
+      .eq('department_id', department.id)
       .limit(1)
   );
 
@@ -251,15 +251,15 @@ export const getHodStaffProfile = asyncHandler(async (req: Request, res: Respons
     db
       .from('courses')
       .select('id,code,title,level,semester,credits,schedule')
-      .eq('lecturer', staffMember.id)
-      .eq('department', department.id)
+      .eq('lecturer_id', staffMember.id)
+      .eq('department_id', department.id)
   );
 
   const courseIds = courses.map((course) => course.id);
 
   const activeStudents = courseIds.length
     ? await getExactCount(
-        db.from('enrollments').select('id', { count: 'exact', head: true }).in('course', courseIds).eq('status', 'active')
+        db.from('enrollments').select('id', { count: 'exact', head: true }).in('course_id', courseIds).eq('status', 'active')
       )
     : 0;
   const pendingResults = courseIds.length
@@ -267,7 +267,7 @@ export const getHodStaffProfile = asyncHandler(async (req: Request, res: Respons
         db
           .from('results')
           .select('id', { count: 'exact', head: true })
-          .in('course', courseIds)
+          .in('course_id', courseIds)
           .eq('approved_by_hod', false)
       )
     : 0;
@@ -299,10 +299,10 @@ export const assignCoursesToStaff = asyncHandler(async (req: Request, res: Respo
   const staffMember = await getSingle<ProfileRow>(
     db
       .from('profiles')
-      .select('id,first_name,last_name,role,department')
+      .select('id,first_name,last_name,role,department_id')
       .eq('id', staffId)
       .eq('role', 'lecturer')
-      .eq('department', department.id)
+      .eq('department_id', department.id)
       .limit(1)
   );
 
@@ -311,9 +311,9 @@ export const assignCoursesToStaff = asyncHandler(async (req: Request, res: Respo
   const courses = await getRows<CourseRow>(
     db
       .from('courses')
-      .select('id,title,code,department')
+      .select('id,title,code,department_id')
       .in('id', courseIds)
-      .eq('department', department.id)
+      .eq('department_id', department.id)
   );
 
   if (courses.length !== courseIds.length) {
@@ -322,7 +322,7 @@ export const assignCoursesToStaff = asyncHandler(async (req: Request, res: Respo
 
   const { error: updateError } = await db
     .from('courses')
-    .update({ lecturer: staffMember.id })
+    .update({ lecturer_id: staffMember.id })
     .in('id', courseIds);
   if (updateError) throw ApiError.internal(`Failed to assign courses: ${updateError.message}`);
 
@@ -375,19 +375,19 @@ export const updateHodDepartmentProfile = asyncHandler(async (req: Request, res:
 
 const collectDepartmentStats = async (db: ReturnType<typeof supabaseAdmin>, departmentId: string) => {
   const [studentCount, staffCount, courseRows] = await Promise.all([
-    getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('department', departmentId)),
-    getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'lecturer').eq('department', departmentId)),
-    getRows<CourseRow>(db.from('courses').select('id').eq('department', departmentId)),
+    getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('department_id', departmentId)),
+    getExactCount(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'lecturer').eq('department_id', departmentId)),
+    getRows<CourseRow>(db.from('courses').select('id').eq('department_id', departmentId)),
   ]);
 
   const courseIds = courseRows.map((course) => course.id);
 
   const [activeEnrollments, pendingResults] = await Promise.all([
     courseIds.length
-      ? getExactCount(db.from('enrollments').select('id', { count: 'exact', head: true }).in('course', courseIds).eq('status', 'active'))
+      ? getExactCount(db.from('enrollments').select('id', { count: 'exact', head: true }).in('course_id', courseIds).eq('status', 'active'))
       : Promise.resolve(0),
     courseIds.length
-      ? getExactCount(db.from('results').select('id', { count: 'exact', head: true }).in('course', courseIds).eq('approved_by_hod', false))
+      ? getExactCount(db.from('results').select('id', { count: 'exact', head: true }).in('course_id', courseIds).eq('approved_by_hod', false))
       : Promise.resolve(0),
   ]);
 
@@ -414,7 +414,7 @@ export const getHodPendingResults = asyncHandler(async (req: Request, res: Respo
   const userId = req.user?.userId;
   if (!userId) throw ApiError.unauthorized('Unauthorized');
   const department = await ensureDepartmentForHod(db, userId);
-  const courses = await getRows<CourseRow>(db.from('courses').select('id').eq('department', department.id));
+  const courses = await getRows<CourseRow>(db.from('courses').select('id').eq('department_id', department.id));
   const courseIds = courses.map((course) => course.id);
 
   if (!courseIds.length) {
@@ -424,8 +424,8 @@ export const getHodPendingResults = asyncHandler(async (req: Request, res: Respo
   const results = await getRows<ResultRow>(
     db
       .from('results')
-      .select('id,course,approved_by_hod,is_published,grade')
-      .in('course', courseIds)
+      .select('id,course_id,approved_by_hod,is_published,grade')
+      .in('course_id', courseIds)
       .eq('approved_by_hod', false)
   );
 
@@ -440,14 +440,14 @@ export const getHodResultDetail = asyncHandler(async (req: Request, res: Respons
   const result = await getSingle<ResultRow>(
     db
       .from('results')
-      .select('id,course,grade,is_published,course_details:courses(id,department)')
+      .select('id,course_id,grade,is_published,course_details:courses(id,department_id)')
       .eq('id', req.params.id)
       .limit(1)
   );
 
   if (!result) throw ApiError.notFound('Result not found');
 
-  const courseDepartment = result.course_details?.department;
+  const courseDepartment = result.course_details?.department_id;
   if (!courseDepartment || courseDepartment !== department.id) {
     throw ApiError.forbidden('You are not authorized to view this result');
   }
@@ -463,11 +463,11 @@ export const getHodDashboard = asyncHandler(async (req: Request, res: Response) 
   // Collect department stats
   const stats = await collectDepartmentStats(db, department.id);
   // Get recent courses
-  const courses = await getRows<CourseRow>(db.from('courses').select('id,code,title,level,semester,credits').eq('department', department.id).limit(5));
+  const courses = await getRows<CourseRow>(db.from('courses').select('id,code,title,level,semester,credits').eq('department_id', department.id).limit(5));
   // Get recent students
-  const students = await getRows<ProfileRow>(db.from('profiles').select('id,first_name,last_name,email,student_id,level').eq('department', department.id).eq('role', 'student').limit(5));
+  const students = await getRows<ProfileRow>(db.from('profiles').select('id,first_name,last_name,email,student_id,level').eq('department_id', department.id).eq('role', 'student').limit(5));
   // Get pending results
-  const pendingResults = await getRows<ResultRow>(db.from('results').select('id,course,total_score,grade,is_published,approved_by_hod').in('course', courses.map(c => c.id)).eq('approved_by_hod', false).limit(5));
+  const pendingResults = await getRows<ResultRow>(db.from('results').select('id,course_id,total_score,grade,is_published,approved_by_hod').in('course_id', courses.map(c => c.id)).eq('approved_by_hod', false).limit(5));
   return res.json(ApiResponse.success('HOD dashboard data retrieved successfully', {
     department,
     stats,
