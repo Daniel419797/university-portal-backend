@@ -183,7 +183,7 @@ function Migrate-Controller {
         'isActive' = 'is_active'
         'isRead' = 'read_at'
         'readAt' = 'read_at'
-        'startDate' = 'start_date'
+        'startDate' = 'start_time'
         'endDate' = 'end_date'
         'dueDate' = 'due_date'
         'totalMarks' = 'total_marks'

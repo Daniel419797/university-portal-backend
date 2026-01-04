@@ -36,7 +36,7 @@ interface QuizRow {
   description?: string | null;
   duration: number; // minutes
   total_marks: number;
-  start_date: string; // ISO
+  start_time: string; // ISO
   end_date: string; // ISO
   questions: QuizQuestion[];
   created_by: string;
@@ -110,7 +110,7 @@ export const createQuiz = asyncHandler(async (req: Request, res: Response) => {
       description: description || null,
       duration,
       total_marks: totalMarks,
-      start_date: startDate,
+      start_time: startDate,
       end_date: endDate,
       questions,
       created_by: userId,
@@ -178,7 +178,7 @@ export const getQuizzes = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const { data, error, count } = await query
-    .order('start_date', { ascending: false })
+    .order('start_time', { ascending: false })
     .range(skip, skip + limitNum - 1);
   if (error) throw ApiError.internal(`Failed to fetch quizzes: ${error.message}`);
 
@@ -284,7 +284,7 @@ export const updateQuiz = asyncHandler(async (req: Request, res: Response) => {
   if (description !== undefined) patch.description = description;
   if (duration !== undefined) patch.duration = duration;
   if (totalMarks !== undefined) patch.total_marks = totalMarks;
-  if (startDate !== undefined) patch.start_date = startDate;
+  if (startDate !== undefined) patch.start_time = startDate;
   if (endDate !== undefined) patch.end_date = endDate;
   if (questions !== undefined) patch.questions = questions;
   if (typeof isActive !== 'undefined') patch.is_active = isActive;
@@ -351,7 +351,7 @@ export const startQuiz = asyncHandler(async (req: Request, res: Response) => {
   if (!q.is_active) throw ApiError.badRequest('Quiz is not active');
 
   const now = new Date();
-  if (now < new Date(q.start_date)) throw ApiError.badRequest('Quiz has not started yet');
+  if (now < new Date(q.start_time)) throw ApiError.badRequest('Quiz has not started yet');
   if (now > new Date(q.end_date)) throw ApiError.badRequest('Quiz has ended');
 
   const { data: enrollment } = await db
