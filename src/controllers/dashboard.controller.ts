@@ -5,23 +5,67 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse } from '../utils/ApiResponse';
 import { ApiError } from '../utils/ApiError';
 
-type CourseRow = { id: string; title: string; code: string; credits?: number; created_at?: string };
-type EnrollmentRow = { id: string; course_id?: string; status?: string; created_at?: string };
-type AssignmentRow = { id: string; title: string; total_marks?: number; due_date?: string; course_id?: string };
-type SubmissionRow = { id: string; assignment_id?: string; grade?: number | null };
-type ResultRow = { grade?: string | null; course?: { credits?: number } };
-type ProfileRow = { id: string; first_name: string; last_name: string; email?: string; role?: string; department?: string | null; is_active?: boolean; created_at?: string };
-type PaymentRow = { id: string; amount: number; status: string; type?: string; created_at?: string };
+interface CourseRow {
+  id: string;
+  title: string;
+  code: string;
+  credits?: number;
+}
 
-// Helper: Get exact count safely
-const getExactCount = async (
-  builder: any, // PostgrestFilterBuilder
-  label: string
-): Promise<number> => {
+interface EnrollmentRow {
+  id?: string;
+  course_id?: string;
+  status?: string;
+  created_at?: string;
+}
+
+interface AssignmentRow {
+  id: string;
+  title: string;
+  total_marks?: number;
+  due_date?: string;
+  course_id?: string;
+}
+
+interface SubmissionRow {
+  assignment_id?: string;
+  grade?: number | null;
+}
+
+interface ResultRow {
+  grade?: string | null;
+  course?: {
+    credits?: number;
+  };
+}
+
+interface PaymentRow {
+  id?: string;
+  status?: string;
+  created_at?: string;
+  amount?: number;
+  student_id?: string;
+  type?: string;
+}
+
+interface ProfileRow {
+  id: string;
+  department?: string;
+  role?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  created_at?: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Safe count helper — accepts a query builder (NOT a promise)
+// ─────────────────────────────────────────────────────────────────────────────
+const getExactCount = async (builder: any, label: string): Promise<number> => {
   try {
     const { count, error } = await builder.select('*', { count: 'exact', head: true });
     if (error) {
-      logger.error(`Count query failed [${label}]`, { error: error.message, details: error });
+      logger.error(`Count query failed [${label}]`, { message: error.message, details: error });
       return 0;
     }
     return count ?? 0;
@@ -31,15 +75,14 @@ const getExactCount = async (
   }
 };
 
-// Helper: Get rows safely
-const getRows = async <T>(
-  builder: any, // PostgrestFilterBuilder
-  label: string
-): Promise<T[]> => {
+// ─────────────────────────────────────────────────────────────────────────────
+// Safe rows helper — accepts a query builder (NOT a promise)
+// ─────────────────────────────────────────────────────────────────────────────
+const getRows = async <T>(builder: any, label: string): Promise<T[]> => {
   try {
     const { data, error } = await builder;
     if (error) {
-      logger.error(`Data query failed [${label}]`, { error: error.message, details: error });
+      logger.error(`Data query failed [${label}]`, { message: error.message, details: error });
       return [];
     }
     return data ?? [];
@@ -49,18 +92,21 @@ const getRows = async <T>(
   }
 };
 
-// ======================
+// ─────────────────────────────────────────────────────────────────────────────
 // Student Dashboard
-// ======================
+// ─────────────────────────────────────────────────────────────────────────────
 export const getStudentDashboard = asyncHandler(async (req: Request, res: Response) => {
   const db = supabaseAdmin() as any;
   const userId = req.user?.userId;
-  if (!userId) throw ApiError.unauthorized('Authentication required');
+
+  if (!userId) {
+    throw ApiError.unauthorized('Authentication required');
+  }
 
   // 1. Enrolled courses count
   const enrolledCourses = await getExactCount(
     db.from('enrollments').eq('student_id', userId).eq('status', 'active'),
-    'student_enrolled_courses_count'
+    'student_enrolled_courses'
   );
 
   // 2. Active enrollments with course details
@@ -154,7 +200,7 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
   );
 
   res.json(
-    ApiResponse.success('Student dashboard fetched successfully', {
+    ApiResponse.success('Student dashboard loaded successfully', {
       enrolledCourses,
       pendingAssignments,
       cgpa: parseFloat(cgpa.toFixed(2)),
@@ -172,29 +218,32 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
   );
 });
 
-// ======================
+// ─────────────────────────────────────────────────────────────────────────────
 // Lecturer Dashboard
-// ======================
+// ─────────────────────────────────────────────────────────────────────────────
 export const getLecturerDashboard = asyncHandler(async (req: Request, res: Response) => {
   const db = supabaseAdmin() as any;
   const userId = req.user?.userId;
-  if (!userId) throw ApiError.unauthorized('Authentication required');
 
-  // 1. Assigned courses count
+  if (!userId) {
+    throw ApiError.unauthorized('Authentication required');
+  }
+
+  // 1. Number of courses assigned to this lecturer
   const assignedCourses = await getExactCount(
     db.from('courses').eq('lecturer_id', userId).eq('is_active', true),
-    'lecturer_assigned_courses_count'
+    'lecturer_assigned_courses'
   );
 
-  // 2. Get lecturer's course IDs
+  // 2. Fetch course IDs for further queries
   const courses = await getRows<CourseRow>(
-    db.from('courses').select('id,title,code').eq('lecturer_id', userId),
-    'lecturer_courses_list'
+    db.from('courses').select('id').eq('lecturer_id', userId),
+    'lecturer_course_ids'
   );
 
-  const courseIds = courses.map(c => c.id);
+  const courseIds = courses.map((c) => c.id);
 
-  // 3. Total enrolled students across all courses
+  // 3. Total active students in lecturer's courses
   const totalStudents = courseIds.length > 0
     ? await getExactCount(
         db.from('enrollments').in('course_id', courseIds).eq('status', 'active'),
@@ -202,7 +251,7 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
       )
     : 0;
 
-  // 4. Assignments and pending grading
+  // 4. Assignments created by lecturer
   const assignments = courseIds.length > 0
     ? await getRows<AssignmentRow>(
         db.from('assignments').select('id').in('course_id', courseIds),
@@ -210,8 +259,9 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
       )
     : [];
 
-  const assignmentIds = assignments.map(a => a.id);
+  const assignmentIds = assignments.map((a) => a.id);
 
+  // 5. Pending submissions to grade
   const pendingSubmissions = assignmentIds.length > 0
     ? await getExactCount(
         db.from('submissions').in('assignment_id', assignmentIds).is('grade', null),
@@ -219,41 +269,46 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
       )
     : 0;
 
-  // 5. Quizzes count
-  const quizzesCount = courseIds.length > 0
+  // 6. Total quizzes
+  const pendingQuizzes = courseIds.length > 0
     ? await getExactCount(
         db.from('quizzes').in('course_id', courseIds),
-        'lecturer_quizzes_count'
+        'lecturer_quizzes'
       )
     : 0;
 
-  // 6. Recent courses with student counts
+  // 7. Recent courses with enrollment stats
   const recentCoursesRaw = await getRows<CourseRow>(
-    db.from('courses')
-      .select('id,title,code')
+    db
+      .from('courses')
+      .select('id, title, code')
       .eq('lecturer_id', userId)
       .order('created_at', { ascending: false })
       .limit(5),
-    'lecturer_recent_courses'
+    'lecturer_recent_courses_raw'
   );
 
   const recentCoursesWithStats = await Promise.all(
-    recentCoursesRaw.map(async (course) => ({
-      id: course.id,
-      title: course.title,
-      code: course.code,
-      studentCount: await getExactCount(
+    recentCoursesRaw.map(async (course) => {
+      const studentCount = await getExactCount(
         db.from('enrollments').eq('course_id', course.id).eq('status', 'active'),
-        `lecturer_course_${course.id}_students`
-      ),
-    }))
+        `lecturer_recent_course_${course.id}_students`
+      );
+      return {
+        id: course.id,
+        title: course.title,
+        code: course.code,
+        studentCount,
+      };
+    })
   );
 
-  // 7. Recent assignments
+  // 8. Recent assignments
   const recentAssignments = courseIds.length > 0
-    ? await getRows<AssignmentRow & { course: CourseRow }>(
-        db.from('assignments')
-          .select('id,title,total_marks,due_date,course:courses(title,code)')
+    ? await getRows<any>(
+        db
+          .from('assignments')
+          .select('id, title, total_marks, due_date, course:courses(title, code)')
           .in('course_id', courseIds)
           .order('created_at', { ascending: false })
           .limit(5),
@@ -261,23 +316,26 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
       )
     : [];
 
-  // 8. Unread notifications
+  // 9. Unread notifications
   const unreadNotifications = await getExactCount(
     db.from('notifications').eq('user_id', userId).is('read_at', null),
     'lecturer_unread_notifications'
   );
 
   res.json(
-    ApiResponse.success('Lecturer dashboard fetched successfully', {
+    ApiResponse.success('Lecturer dashboard loaded successfully', {
       assignedCourses,
       totalStudents,
       pendingSubmissions,
-      pendingQuizzes: quizzesCount,
+      pendingQuizzes,
       recentCourses: recentCoursesWithStats,
-      recentAssignments: recentAssignments.map(a => ({
+      recentAssignments: recentAssignments.map((a: any) => ({
         id: a.id,
         title: a.title,
-        course: { title: a.course.title, code: a.course.code },
+        course: {
+          title: a.course?.title,
+          code: a.course?.code,
+        },
         deadline: a.due_date,
         totalMarks: a.total_marks,
       })),
@@ -286,13 +344,16 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
   );
 });
 
-// ======================
+// ─────────────────────────────────────────────────────────────────────────────
 // HOD Dashboard
-// ======================
+// ─────────────────────────────────────────────────────────────────────────────
 export const getHODDashboard = asyncHandler(async (req: Request, res: Response) => {
   const db = supabaseAdmin() as any;
   const userId = req.user?.userId;
-  if (!userId) throw ApiError.unauthorized('Authentication required');
+
+  if (!userId) {
+    throw ApiError.unauthorized('Authentication required');
+  }
 
   // 1. Get user's department
   const userRows = await getRows<ProfileRow>(
@@ -346,7 +407,7 @@ export const getHODDashboard = asyncHandler(async (req: Request, res: Response) 
     db.from('courses').select('id').eq('department', user.department),
     'hod_department_courses'
   );
-  const departmentCourseIds = departmentCourses.map(c => c.id);
+  const departmentCourseIds = departmentCourses.map((c) => c.id);
 
   const recentEnrollments = await getRows<EnrollmentRow & { student?: ProfileRow; course?: CourseRow }>(
     db
@@ -366,7 +427,7 @@ export const getHODDashboard = asyncHandler(async (req: Request, res: Response) 
   );
 
   res.json(
-    ApiResponse.success('HOD dashboard fetched successfully', {
+    ApiResponse.success('HOD dashboard loaded successfully', {
       departmentStats: {
         totalStudents,
         totalStaff,
@@ -390,13 +451,16 @@ export const getHODDashboard = asyncHandler(async (req: Request, res: Response) 
   );
 });
 
-// ======================
+// ─────────────────────────────────────────────────────────────────────────────
 // Bursary Dashboard
-// ======================
+// ─────────────────────────────────────────────────────────────────────────────
 export const getBursaryDashboard = asyncHandler(async (req: Request, res: Response) => {
   const db = supabaseAdmin() as any;
   const userId = req.user?.userId;
-  if (!userId) throw ApiError.unauthorized('Authentication required');
+
+  if (!userId) {
+    throw ApiError.unauthorized('Authentication required');
+  }
 
   // 1. Payment statistics
   const totalPayments = await getExactCount(db.from('payments'), 'bursary_total_payments');
@@ -451,7 +515,7 @@ export const getBursaryDashboard = asyncHandler(async (req: Request, res: Respon
   );
 
   res.json(
-    ApiResponse.success('Bursary dashboard fetched successfully', {
+    ApiResponse.success('Bursary dashboard loaded successfully', {
       paymentStats: {
         total: totalPayments,
         verified: verifiedPayments,
@@ -483,13 +547,16 @@ export const getBursaryDashboard = asyncHandler(async (req: Request, res: Respon
   );
 });
 
-// @desc    Get Admin Dashboard
-// @route   GET /api/v1/admin/dashboard
-// @access  Private (Admin)
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin Dashboard
+// ─────────────────────────────────────────────────────────────────────────────
 export const getAdminDashboard = asyncHandler(async (req: Request, res: Response) => {
   const db = supabaseAdmin() as any;
   const userId = req.user?.userId;
-  if (!userId) throw ApiError.unauthorized('Authentication required');
+
+  if (!userId) {
+    throw ApiError.unauthorized('Authentication required');
+  }
 
   // 1. User statistics
   const totalUsers = await getExactCount(db.from('profiles'), 'admin_total_users');
@@ -557,7 +624,7 @@ export const getAdminDashboard = asyncHandler(async (req: Request, res: Response
   );
 
   res.json(
-    ApiResponse.success('Admin dashboard fetched successfully', {
+    ApiResponse.success('Admin dashboard loaded successfully', {
       users: {
         total: totalUsers,
         students: totalStudents,
