@@ -218,11 +218,11 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
     if (!userId) throw new Error('Unauthorized');
 
   const assignedCourses = await getExactCount(
-    db.from('courses').select('id', { count: 'exact', head: true }).eq('lecturer', userId)
+    db.from('courses').select('id', { count: 'exact', head: true }).eq('lecturer_id', userId)
   );
 
   const courses = await getRows<CourseRow>(
-    db.from('courses').select('id,title,code').eq('lecturer', userId)
+    db.from('courses').select('id,title,code').eq('lecturer_id', userId)
   );
   const courseIds = (courses || []).map((c) => c.id);
 
@@ -230,15 +230,15 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
     db
       .from('enrollments')
       .select('id', { count: 'exact', head: true })
-      .in('course', courseIds.length ? courseIds : ['__none__'])
+      .in('course_id', courseIds.length ? courseIds : ['__none__'])
       .eq('status', 'active')
   );
 
   const assignments = await getRows<AssignmentRow>(
     db
       .from('assignments')
-      .select('id, title, course')
-      .in('course', courseIds.length ? courseIds : ['__none__'])
+      .select('id, title, course_id')
+      .in('course_id', courseIds.length ? courseIds : ['__none__'])
   );
 
   const assignmentIds = assignments.map((a) => a.id);
@@ -247,15 +247,15 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
     db
       .from('submissions')
       .select('id', { count: 'exact', head: true })
-      .in('assignment', assignmentIds.length ? assignmentIds : ['__none__'])
+      .in('assignment_id', assignmentIds.length ? assignmentIds : ['__none__'])
       .is('grade', null)
   );
 
   const quizzes = await getRows<QuizRow>(
     db
       .from('quizzes')
-      .select('id, title, course')
-      .in('course', courseIds.length ? courseIds : ['__none__'])
+      .select('id, title, course_id')
+      .in('course_id', courseIds.length ? courseIds : ['__none__'])
   );
 
   const recentCourses = await getRows<CourseRow>(
@@ -273,7 +273,7 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
         db
           .from('enrollments')
           .select('id', { count: 'exact', head: true })
-          .eq('course', course.id)
+          .eq('course_id', course.id)
           .eq('status', 'active')
       );
       return {
@@ -288,8 +288,8 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
   const recentAssignments = await getRows<AssignmentRow>(
     db
       .from('assignments')
-      .select('id,title,total_marks,due_date,course:course(id,title,code)')
-      .in('course', courseIds.length ? courseIds : ['__none__'])
+      .select('id,title,total_marks,due_date,course:course_id(id,title,code)')
+      .in('course_id', courseIds.length ? courseIds : ['__none__'])
       .order('created_at', { ascending: false })
       .limit(5)
   );
@@ -298,7 +298,7 @@ export const getLecturerDashboard = asyncHandler(async (req: Request, res: Respo
     db
       .from('notifications')
       .select('id', { count: 'exact', head: true })
-      .eq('user', userId)
+      .eq('user_id', userId)
       .eq('is_read', false)
   );
 
