@@ -38,13 +38,14 @@ const getExactCount = async (
   query: unknown
 ): Promise<number> => {
   try {
-    const result = await (query as unknown as Promise<{ count: number | null; error: { message?: string } | null }>);
+    const result = await (query as any);
     if (!result) return 0;
-    const { count, error } = result as { count?: number | null; error?: { message?: string } | null };
-    if (error) throw new Error(error.message ?? JSON.stringify(error));
+    const { count, error } = result as any;
+    if (error) throw new Error('Supabase error: ' + JSON.stringify(error));
     return count ?? 0;
   } catch (e) {
-    throw new Error(`getExactCount failed: ${e instanceof Error ? e.message : String(e)}`);
+    const serialized = e && typeof e === 'object' ? JSON.stringify(e, Object.getOwnPropertyNames(e)) : String(e);
+    throw new Error(`getExactCount failed: ${serialized}`);
   }
 };
 
@@ -52,13 +53,14 @@ const getRows = async <T>(
   query: unknown
 ): Promise<T[]> => {
   try {
-    const result = await (query as unknown as Promise<{ data: T[] | null; error: { message?: string } | null }>);
+    const result = await (query as any);
     if (!result) return [];
-    const { data, error } = result as { data?: T[] | null; error?: { message?: string } | null };
-    if (error) throw new Error(error.message ?? JSON.stringify(error));
+    const { data, error } = result as any;
+    if (error) throw new Error('Supabase error: ' + JSON.stringify(error));
     return data ?? [];
   } catch (e) {
-    throw new Error(`getRows failed: ${e instanceof Error ? e.message : String(e)}`);
+    const serialized = e && typeof e === 'object' ? JSON.stringify(e, Object.getOwnPropertyNames(e)) : String(e);
+    throw new Error(`getRows failed: ${serialized}`);
   }
 };
 
