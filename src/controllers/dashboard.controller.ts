@@ -3,6 +3,7 @@ import logger from '../config/logger';
 import { supabaseAdmin } from '../config/supabase';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse } from '../utils/ApiResponse';
+import { PAYMENT_STATUS } from '../utils/constants';
 import { ApiError } from '../utils/ApiError';
 
 interface CourseRow {
@@ -222,7 +223,7 @@ export const getStudentDashboard = asyncHandler(async (req: Request, res: Respon
       .from('payments')
       .select('status')
       .eq('student_id', userId)
-      .eq('status', 'verified')
+      .eq('status', PAYMENT_STATUS.SUCCESSFUL)
       .order('created_at', { ascending: false })
       .limit(1),
     'student_latest_payment'
@@ -565,7 +566,7 @@ export const getBursaryDashboard = asyncHandler(async (req: Request, res: Respon
   const verifiedPayments = await getExactCount(
     db,
     'payments',
-    [{ column: 'status', value: 'verified' }],
+    [{ column: 'status', value: PAYMENT_STATUS.SUCCESSFUL }],
     'bursary_verified_payments'
   );
 
@@ -585,7 +586,7 @@ export const getBursaryDashboard = asyncHandler(async (req: Request, res: Respon
 
   // 2. Revenue calculations
   const verifiedRows = await getRows<{ amount: number }>(
-    db.from('payments').select('amount').eq('status', 'verified'),
+    db.from('payments').select('amount').eq('status', PAYMENT_STATUS.SUCCESSFUL),
     'bursary_verified_amounts'
   );
   const paidAmount = verifiedRows.reduce((sum: number, p) => sum + (Number(p.amount) || 0), 0);
@@ -725,8 +726,8 @@ export const getAdminDashboard = asyncHandler(async (req: Request, res: Response
     paymentStatsMap[key].count += 1;
     paymentStatsMap[key].totalAmount += Number(p.amount) || 0;
   }
-  const verifiedPaymentStat = paymentStatsMap['verified'] || { count: 0, totalAmount: 0 };
-  const pendingPaymentStat = paymentStatsMap['pending'] || { count: 0, totalAmount: 0 };
+  const verifiedPaymentStat = paymentStatsMap[PAYMENT_STATUS.SUCCESSFUL] || { count: 0, totalAmount: 0 };
+  const pendingPaymentStat = paymentStatsMap[PAYMENT_STATUS.PENDING] || { count: 0, totalAmount: 0 };
 
   // 5. Hostel statistics
   const totalHostels = await getExactCount(db, 'hostels', [], 'admin_total_hostels');

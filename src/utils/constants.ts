@@ -18,9 +18,9 @@ export const PAYMENT_TYPES = {
 
 export const PAYMENT_STATUS = {
   PENDING: 'pending',
-  VERIFIED: 'verified',
-  REJECTED: 'rejected',
-  PROCESSING: 'processing',
+  SUCCESSFUL: 'successful',
+  FAILED: 'failed',
+  REFUNDED: 'refunded',
 } as const;
 
 export const NOTIFICATION_TYPES = {

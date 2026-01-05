@@ -21,7 +21,7 @@ export interface QueryFilter {
 
 export type UserRole = 'student' | 'lecturer' | 'admin' | 'hod' | 'bursary';
 export type PaymentType = 'tuition' | 'hostel' | 'library' | 'medical' | 'sports' | 'exam' | 'late_registration';
-export type PaymentStatus = 'pending' | 'verified' | 'rejected' | 'processing';
+export type PaymentStatus = 'pending' | 'successful' | 'failed' | 'refunded';
 export type ApplicationStatus = 'pending' | 'approved' | 'rejected' | 'allocated';
 export type NotificationType = 'info' | 'success' | 'warning' | 'error';
 export type TwoFactorMethod = 'totp' | 'email';

@@ -189,10 +189,9 @@ export const getBursaryReports = asyncHandler(async (req: Request, res: Response
     (acc, p: PaymentRow) => {
       acc.totalCount += 1;
       acc.totalAmount += Number(p.amount || 0);
-      if (p.status === PAYMENT_STATUS.VERIFIED) acc.verifiedAmount += Number(p.amount || 0);
+      if (p.status === PAYMENT_STATUS.SUCCESSFUL) acc.verifiedAmount += Number(p.amount || 0);
       if (p.status === PAYMENT_STATUS.PENDING) acc.pendingAmount += Number(p.amount || 0);
-      if (p.status === PAYMENT_STATUS.REJECTED) acc.rejectedAmount += Number(p.amount || 0);
-      if (p.status === PAYMENT_STATUS.PROCESSING) acc.processingAmount += Number(p.amount || 0);
+      if (p.status === PAYMENT_STATUS.FAILED) acc.rejectedAmount += Number(p.amount || 0);
       return acc;
     },
     { totalCount: 0, totalAmount: 0, verifiedAmount: 0, pendingAmount: 0, rejectedAmount: 0, processingAmount: 0 }
@@ -432,7 +431,7 @@ export const generateBursaryReport = asyncHandler(async (req: Request, res: Resp
       acc.totalAmount += row.amount;
       acc.byStatus[row.status] = (acc.byStatus[row.status] ?? 0) + 1;
       acc.byType[row.type] = (acc.byType[row.type] ?? 0) + 1;
-      if (row.status === PAYMENT_STATUS.VERIFIED) {
+      if (row.status === PAYMENT_STATUS.SUCCESSFUL) {
         acc.verifiedAmount += row.amount;
       }
       if (row.status === PAYMENT_STATUS.PENDING) {

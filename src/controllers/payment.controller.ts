@@ -20,7 +20,8 @@ import { ApiError } from '../utils/ApiError';
 import { ApiResponse } from '../utils/ApiResponse';
 import paymentService from '../services/payment.service';
 import notificationService from '../services/notification.service';
-import { USER_ROLES } from '../utils/constants';
+import { USER_ROLES, PAYMENT_STATUS } from '../utils/constants';
+import { PaymentStatus } from '../types';
 import { generateReference } from '../utils/helpers';
 
 // Typed rows
@@ -30,7 +31,7 @@ interface PaymentRow {
   type: string;
   amount: number;
   reference: string;
-  status: 'pending' | 'verified' | 'rejected' | 'processing' | string;
+  status: PaymentStatus;
   session_id: string;
   semester: string;
   payment_date: string | null;
@@ -77,7 +78,7 @@ export const initializePayment = asyncHandler(async (req: Request, res: Response
     .eq('type', type)
     .eq('session_id', session)
     .eq('semester', semester)
-    .in('status', ['verified', 'processing'])
+    .in('status', [PAYMENT_STATUS.SUCCESSFUL, PAYMENT_STATUS.PENDING])
     .maybeSingle();
   if (existingError) throw ApiError.internal(`Failed to check existing payments: ${existingError.message}`);
   if (existing) throw ApiError.badRequest('Payment for this type already exists for the session');
@@ -152,7 +153,7 @@ export const verifyPayment = asyncHandler(async (req: Request, res: Response) =>
     const { data: updated, error: updateError } = await db
       .from('payments')
       .update({
-        status: 'verified',
+        status: PAYMENT_STATUS.SUCCESSFUL,
         payment_date: paidAtIso,
         payment_method: verification.channel || 'card',
         verified_at: new Date().toISOString(),
@@ -174,7 +175,7 @@ export const verifyPayment = asyncHandler(async (req: Request, res: Response) =>
   } else {
     const { error: rejectError } = await db
       .from('payments')
-      .update({ status: 'rejected', verified_at: new Date().toISOString() })
+      .update({ status: PAYMENT_STATUS.FAILED, verified_at: new Date().toISOString() })
       .eq('id', payment.id);
     if (rejectError) throw ApiError.internal(`Failed to update payment status: ${rejectError.message}`);
     throw ApiError.badRequest('Payment verification failed');
@@ -270,13 +271,13 @@ export const manuallyVerifyPayment = asyncHandler(async (req: Request, res: Resp
     .maybeSingle();
   if (error) throw ApiError.internal(`Failed to fetch payment: ${error.message}`);
   if (!payment) throw ApiError.notFound('Payment not found');
-  if (payment.status === 'verified') throw ApiError.badRequest('Payment already verified');
+  if (payment.status === PAYMENT_STATUS.SUCCESSFUL) throw ApiError.badRequest('Payment already verified');
 
   const paidAtIso = payment.payment_date || new Date().toISOString();
   const { data: updated, error: updateError } = await db
     .from('payments')
     .update({
-      status: 'verified',
+      status: PAYMENT_STATUS.SUCCESSFUL,
       verified_by: userId,
       verified_at: new Date().toISOString(),
       payment_date: paidAtIso,
@@ -313,11 +314,11 @@ export const rejectPayment = asyncHandler(async (req: Request, res: Response) =>
     .maybeSingle();
   if (error) throw ApiError.internal(`Failed to fetch payment: ${error.message}`);
   if (!payment) throw ApiError.notFound('Payment not found');
-  if (payment.status === 'verified') throw ApiError.badRequest('Cannot reject verified payment');
+  if (payment.status === PAYMENT_STATUS.SUCCESSFUL) throw ApiError.badRequest('Cannot reject verified payment');
 
   const { data: updated, error: updateError } = await db
     .from('payments')
-    .update({ status: 'rejected', verified_by: userId, verified_at: new Date().toISOString() })
+    .update({ status: PAYMENT_STATUS.FAILED, verified_by: userId, verified_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single();
@@ -356,8 +357,8 @@ export const getPaymentReceipt = asyncHandler(async (req: Request, res: Response
     throw ApiError.forbidden('You are not authorized to access this receipt');
   }
 
-  if (payment.status !== 'verified') {
-    throw ApiError.badRequest('Receipt only available for verified payments');
+  if (payment.status !== PAYMENT_STATUS.SUCCESSFUL) {
+    throw ApiError.badRequest('Receipt only available for successful payments');
   }
 
   // Fetch related data
@@ -444,16 +445,16 @@ export const getPaymentStats = asyncHandler(async (req: Request, res: Response) 
     };
     entry.totalAmount += p.amount;
     entry.count += 1;
-    if (p.status === 'verified') {
+    if (p.status === PAYMENT_STATUS.SUCCESSFUL) {
       entry.verifiedAmount += p.amount;
       entry.verifiedCount += 1;
       totalRevenue += p.amount;
       verifiedPayments += 1;
-    } else if (p.status === 'pending') {
+    } else if (p.status === PAYMENT_STATUS.PENDING) {
       entry.pendingAmount += p.amount;
       entry.pendingCount += 1;
       pendingPayments += 1;
-    } else if (p.status === 'rejected') {
+    } else if (p.status === PAYMENT_STATUS.FAILED) {
       entry.rejectedCount += 1;
       rejectedPayments += 1;
     }
@@ -499,11 +500,11 @@ export const getStudentPayments = asyncHandler(async (req: Request, res: Respons
 
   const rows = (payments || []) as PaymentRow[];
   const summary = {
-    totalPaid: rows.filter((p) => p.status === 'verified').reduce((sum, p) => sum + p.amount, 0),
-    totalPending: rows.filter((p) => p.status === 'pending').reduce((sum, p) => sum + p.amount, 0),
-    verifiedCount: rows.filter((p) => p.status === 'verified').length,
-    pendingCount: rows.filter((p) => p.status === 'pending').length,
-    rejectedCount: rows.filter((p) => p.status === 'rejected').length,
+    totalPaid: rows.filter((p) => p.status === PAYMENT_STATUS.SUCCESSFUL).reduce((sum, p) => sum + p.amount, 0),
+    totalPending: rows.filter((p) => p.status === PAYMENT_STATUS.PENDING).reduce((sum, p) => sum + p.amount, 0),
+    verifiedCount: rows.filter((p) => p.status === PAYMENT_STATUS.SUCCESSFUL).length,
+    pendingCount: rows.filter((p) => p.status === PAYMENT_STATUS.PENDING).length,
+    rejectedCount: rows.filter((p) => p.status === PAYMENT_STATUS.FAILED).length,
   };
 
   res.json(ApiResponse.success('Data retrieved successfully', { summary, payments: rows }));
