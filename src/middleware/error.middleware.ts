@@ -19,10 +19,13 @@ export const errorHandler = (
   const apiError = error as ApiError;
   const statusCode = apiError.statusCode || 500;
 
+  // Only expose the stack trace for server errors (5xx) during development
+  const includeStack = process.env.NODE_ENV === 'development' && statusCode >= 500;
+
   const response = {
     success: false,
     message: apiError.message,
-    ...(process.env.NODE_ENV === 'development' && { stack: apiError.stack }),
+    ...(includeStack && { stack: apiError.stack }),
   };
 
   // Log with appropriate severity: warn for 4xx, error for 5xx, info otherwise
