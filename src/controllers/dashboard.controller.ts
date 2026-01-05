@@ -97,15 +97,16 @@ const getExactCount = async (
     }
     
     const { count, error } = await query;
-    
+
     if (error) {
       logger.error(`Count query failed [${label}]`, { message: error.message, details: error });
-      return 0;
+      throw new Error(`Count query failed [${label}]: ${error.message ?? JSON.stringify(error)}`);
     }
+
     return count ?? 0;
   } catch (err) {
     logger.error(`Unexpected error in count query [${label}]`, { err });
-    return 0;
+    throw err instanceof Error ? err : new Error(`Unexpected error in count query [${label}]: ${String(err)}`);
   }
 };
 
@@ -117,12 +118,12 @@ const getRows = async <T>(builder: any, label: string): Promise<T[]> => {
     const { data, error } = await builder;
     if (error) {
       logger.error(`Data query failed [${label}]`, { message: error.message, details: error });
-      return [];
+      throw new Error(`Data query failed [${label}]: ${error.message ?? JSON.stringify(error)}`);
     }
     return data ?? [];
   } catch (err) {
     logger.error(`Unexpected error in data query [${label}]`, { err });
-    return [];
+    throw err instanceof Error ? err : new Error(`Unexpected error in data query [${label}]: ${String(err)}`);
   }
 };
 
