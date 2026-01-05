@@ -604,7 +604,7 @@ export const getBursaryDashboard = asyncHandler(async (req: Request, res: Respon
   const recentPayments = await getRows<PaymentRow & { student?: { id: string; first_name: string; last_name: string; email?: string } }>(
     db
       .from('payments')
-      .select('id,amount,status,type,created_at, student:profiles(id,first_name,last_name,email)')
+      .select('id,amount,status,type,created_at, student:profiles!payments_student_id_fkey(id,first_name,last_name,email)')
       .order('created_at', { ascending: false })
       .limit(10),
     'bursary_recent_payments'
@@ -762,7 +762,7 @@ export const getAdminDashboard = asyncHandler(async (req: Request, res: Response
   const recentPayments = await getRows<PaymentRow & { student?: { id: string; first_name: string; last_name: string } }>(
     db
       .from('payments')
-      .select('id,amount,status,created_at, student:profiles(id,first_name,last_name)')
+      .select('id,amount,status,created_at, student:profiles!payments_student_id_fkey(id,first_name,last_name)')
       .order('created_at', { ascending: false })
       .limit(5),
     'admin_recent_payments'

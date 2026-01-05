@@ -163,7 +163,7 @@ export const getBursaryReports = asyncHandler(async (req: Request, res: Response
   let paymentsQuery = db
     .from('payments')
     .select(
-      'id, reference, amount, status, type, created_at, payment_date, student:profiles(id,first_name,last_name,email,student_id), session, semester'
+      'id, reference, amount, status, type, created_at, payment_date, student:profiles!payments_student_id_fkey(id,first_name,last_name,email,student_id), session, semester'
     )
     .order('created_at', { ascending: false });
   if (paymentFilter.sessionId) paymentsQuery = paymentsQuery.eq('session', paymentFilter.sessionId);
@@ -174,7 +174,7 @@ export const getBursaryReports = asyncHandler(async (req: Request, res: Response
   if (paymentFilter.startDate) paymentsQuery = paymentsQuery.gte('created_at', paymentFilter.startDate.toISOString());
   if (paymentFilter.endDate) paymentsQuery = paymentsQuery.lte('created_at', paymentFilter.endDate.toISOString());
 
-  const { data: recentPayments, error: paymentsErr } = await paymentsQuery.limit(15);
+  const { data: recentPayments, error: paymentsErr } = await paymentsQuery.limit(15); // note: student profile join uses payments_student_id_fkey to disambiguate relationship
   if (paymentsErr) throw ApiError.internal(`Failed to fetch payments: ${paymentsErr.message}`);
 
   let scholarshipQuery = db
