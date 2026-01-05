@@ -25,7 +25,14 @@ export const errorHandler = (
     ...(process.env.NODE_ENV === 'development' && { stack: apiError.stack }),
   };
 
-  logger.error(`${statusCode} - ${apiError.message} - ${req.originalUrl} - ${req.method} - ${req.ip}`);
+  // Log with appropriate severity: warn for 4xx, error for 5xx, info otherwise
+  if (statusCode >= 500) {
+    logger.error(`${statusCode} - ${apiError.message} - ${req.originalUrl} - ${req.method} - ${req.ip}`);
+  } else if (statusCode >= 400) {
+    logger.warn(`${statusCode} - ${apiError.message} - ${req.originalUrl} - ${req.method} - ${req.ip}`);
+  } else {
+    logger.info(`${statusCode} - ${apiError.message} - ${req.originalUrl} - ${req.method} - ${req.ip}`);
+  }
 
   res.status(statusCode).json(response);
 };
