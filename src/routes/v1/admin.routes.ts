@@ -18,6 +18,9 @@ import {
   updateAnnouncement,
   updateHostelRoom,
 } from '../../controllers/admin.controller';
+
+// Admin dashboard handler
+import { getAdminDashboard } from '../../controllers/dashboard.controller';
 import {
   getUsers,
   getUserById,
@@ -49,6 +52,9 @@ import { USER_ROLES } from '../../utils/constants';
 const router = Router();
 
 router.use(authenticate, authorizeRoles(USER_ROLES.ADMIN));
+
+// Admin dashboard route (alias to keep compatibility with clients requesting /api/v1/admin/dashboard)
+router.get('/dashboard', getAdminDashboard);
 
 router.post('/users/bulk-upload', uploadCsv, bulkUploadUsers);
 router
