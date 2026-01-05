@@ -1,4 +1,6 @@
 module.exports = {
+  // Ignore compiled artifacts to prevent ESLint from linting the `dist/` folder
+  ignorePatterns: ['dist/', 'node_modules/'],
   parser: '@typescript-eslint/parser',
   extends: [
     'eslint:recommended',
