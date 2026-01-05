@@ -141,10 +141,28 @@ const ensureSystemSettings = async () => {
   const db = supabaseAdmin();
   const { data: existing, error } = await db.from('system_settings').select('*').limit(1).maybeSingle();
   if (error) throw ApiError.internal(`Failed to read settings: ${error.message}`);
-  if (existing) return existing;
-  const { data: inserted, error: insertError } = await db.from('system_settings').insert({}).select().single();
+  if (existing) {
+    // Merge id with stored value for convenient access (e.g., settings.portal)
+    return { id: existing.id, ...(existing.value ?? {}) };
+  }
+
+  // Default settings payload
+  const defaultValue: SystemSettings = {
+    portal: {
+      defaultCurrency: process.env.DEFAULT_CURRENCY || 'NGN',
+    },
+  };
+
+  // Insert a sensible default row with a non-null unique key
+  const { data: inserted, error: insertError } = await db
+    .from('system_settings')
+    .insert({ key: 'portal', value: defaultValue })
+    .select()
+    .single();
+
   if (insertError) throw ApiError.internal(`Failed to init settings: ${insertError.message}`);
-  return inserted;
+
+  return { id: inserted.id, ...(inserted.value ?? {}) };
 };
 
 const normalizeAudience = (audience?: string[]): Array<UserRole | 'all'> => {
