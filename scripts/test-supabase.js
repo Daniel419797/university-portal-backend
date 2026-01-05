@@ -5,8 +5,8 @@ Usage:
 Optionally set TEST_LECTURER_ID to query specific lecturer rows.
 */
 
-const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config();
+import { createClient } from '@supabase/supabase-js';
+import 'dotenv/config';
 
 const url = process.env.SUPABASE_URL || '<MISSING_SUPABASE_URL>';
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY || '<MISSING_SERVICE_ROLE_KEY>';
