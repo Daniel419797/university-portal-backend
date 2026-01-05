@@ -10,7 +10,12 @@ const testUser = {
   lastName: 'User',
 };
 
-describe('Auth integration', () => {
+const describeIfSupabase = process.env.SUPABASE_URL ? describe : describe.skip;
+if (!process.env.SUPABASE_URL) {
+  console.warn('Skipping integration tests: SUPABASE_URL environment variable is not set.');
+}
+
+describeIfSupabase('Auth integration', () => {
   beforeAll(async () => {
     await startTestDatabase();
   });

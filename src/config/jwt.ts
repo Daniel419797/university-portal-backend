@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { ApiError } from '../utils/ApiError';
 
 const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'access_secret_fallback';
@@ -12,12 +12,14 @@ export interface TokenPayload {
   role: string;
 }
 
+const signOpts = (exp: string | number): SignOptions => ({ expiresIn: exp as SignOptions['expiresIn'] });
+
 export const generateAccessToken = (payload: TokenPayload): string => {
-  return jwt.sign(payload, ACCESS_SECRET, { expiresIn: ACCESS_EXPIRY } as any);
+  return jwt.sign(payload, ACCESS_SECRET, signOpts(ACCESS_EXPIRY));
 };
 
 export const generateRefreshToken = (payload: TokenPayload): string => {
-  return jwt.sign(payload, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRY } as any);
+  return jwt.sign(payload, REFRESH_SECRET, signOpts(REFRESH_EXPIRY));
 };
 
 export const verifyAccessToken = (token: string): TokenPayload => {
@@ -36,6 +38,5 @@ export const verifyRefreshToken = (token: string): TokenPayload => {
   }
 };
 
-export const decodeToken = (token: string): any => {
-  return jwt.decode(token);
-};
+export const decodeToken = (token: string): unknown => jwt.decode(token);
+

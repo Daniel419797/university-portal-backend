@@ -68,6 +68,17 @@ async function ensureSupabaseProfile(userId: string, email: string, payload?: Su
     fromEmail.lastName;
   const role = normalizeRole(meta.role as string) || 'student';
 
+  // If the role is student, generate a human-friendly student_id from the DB function
+  let student_id: string | undefined;
+  if (role === 'student') {
+    const gen = await db.rpc('generate_student_id');
+    if (gen.error) {
+      logger.error('Failed to generate student_id', { error: gen.error });
+      throw ApiError.internal('Failed to generate student id');
+    }
+    student_id = gen.data as unknown as string;
+  }
+
   const inserted = await db
     .from('profiles')
     .insert({
@@ -77,6 +88,7 @@ async function ensureSupabaseProfile(userId: string, email: string, payload?: Su
       last_name: lastName,
       role,
       is_active: true,
+      student_id: student_id ?? null,
     })
     .select('*')
     .single();

@@ -1,15 +1,17 @@
-export class ApiResponse<T = any> {
+export type ApiMeta = {
+  page?: number;
+  limit?: number;
+  total?: number;
+  totalPages?: number;
+};
+
+export class ApiResponse<T = unknown> {
   success: boolean;
   message: string;
   data?: T;
-  meta?: {
-    page?: number;
-    limit?: number;
-    total?: number;
-    totalPages?: number;
-  };
+  meta?: ApiMeta;
 
-  constructor(success: boolean, message: string, data?: T, meta?: any) {
+  constructor(success: boolean, message: string, data?: T, meta?: ApiMeta) {
     this.success = success;
     this.message = message;
     if (data !== undefined) {
@@ -20,7 +22,7 @@ export class ApiResponse<T = any> {
     }
   }
 
-  static success<T>(message: string, data?: T, meta?: any): ApiResponse<T> {
+  static success<T>(message: string, data?: T, meta?: ApiMeta): ApiResponse<T> {
     return new ApiResponse<T>(true, message, data, meta);
   }
 
