@@ -40,6 +40,7 @@ import {
 	markAllAsRead,
 	deleteNotification,
 } from '../../controllers/notification.controller';
+import { getStudentDashboard } from '../../controllers/dashboard.controller';
 
 const router = Router();
 
@@ -95,6 +96,9 @@ router.get('/students/notifications', getNotifications);
 router.put('/students/notifications/:id/read', markAsRead);
 router.put('/students/notifications/read-all', markAllAsRead);
 router.delete('/students/notifications/:id', deleteNotification);
+
+// Student dashboard (convenience route)
+router.get('/students/dashboard', getStudentDashboard);
 
 // Specialty endpoints
 router.get('/students/timetable', getStudentTimetable);
